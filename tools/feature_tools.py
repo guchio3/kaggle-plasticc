@@ -212,16 +212,25 @@ def get_max_min_diff(x):
 
 def quantile10(x):
     return x.quantile(0.10)
+
 def quantile25(x):
     return x.quantile(0.25)
+
 def quantile75(x):
     return x.quantile(0.75)
+
 def quantile90(x):
     return x.quantile(0.90)
+
+def quantile95(x):
+    return x.quantile(0.95)
+
 def minmax_range(x):
     return x.max() - x.min()
+
 def quantile2575_range(x):
     return quantile75(x) - quantile25(x)
+
 def quantile1090_range(x):
     return quantile90(x) - quantile10(x)
 
@@ -299,6 +308,13 @@ def _for_set_df(set_df):
         'detected': ['mean', ],
         'flux_ratio_sq': ['sum', 'skew'],
         'flux_by_flux_ratio_sq': ['sum', 'skew'],
+    }
+
+    band_std_upper_flux_aggregations = {
+        'mjd': [get_max_min_diff, 'var', 'skew', ],
+#        'flux_err': ['min', 'max', 'mean', 'median', 'std', 'var', 'skew', kurtosis],
+        'flux': ['count', ],
+        # 'mjd': ['min', 'max', 'var', ],
     }
 
     # === run aggregations ===
@@ -432,6 +448,23 @@ def _for_set_df(set_df):
         band_fe_set_df['band-{}_flux_diff'.format(passband)] = \
             band_fe_set_df['band-{}_flux_max'.format(passband)] - \
             band_fe_set_df['band-{}_flux_min'.format(passband)]
+
+        # std upper type fe for each passband
+        band_object_flux_std_df = _passband_set_df[['object_id', 'flux']].\
+            groupby('object_id').\
+            std().\
+            abs().\
+            rename(columns={'flux': 'flux_abs_std'})
+        band_std_upper_flux_df = _passband_set_df.merge(
+            band_object_flux_std_df, on='object_id', how='left')
+        band_std_upper_flux_df = band_std_upper_flux_df[band_std_upper_flux_df.flux >
+                                                abs(band_std_upper_flux_df.flux_abs_std)]
+        band_fe_std_upper_flux_df = band_std_upper_flux_df.groupby('object_id').\
+            agg({**band_std_upper_flux_aggregations})
+        band_fe_std_upper_flux_df.columns = pd.Index(
+            ['band-{}_std_upper_'.format(passband) + e[0] + "_" + e[1]
+                for e in band_fe_std_upper_flux_df.columns.tolist()])
+
         # feature $B2aB?$J$N$G(B drop
         passband_df = passband_df.merge(
             starter_fe_df, on='object_id', how='left')
@@ -443,6 +476,11 @@ def _for_set_df(set_df):
 #        passband_df['band-{}_flux_mean_diff'.format(passband)] = \
 #            passband_df['flux_mean'.format(passband)] - \
 #            passband_df['band-{}_flux_mean'.format(passband)]
+        passband_df = passband_df.merge(
+            band_fe_std_upper_flux_df,
+            on='object_id',
+            how='left')
+        gc.collect()
 
     # feature engineering for passband_df
     for lpb in passbands:

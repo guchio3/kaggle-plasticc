@@ -1,0 +1,17 @@
+./log/*
+./inputs/*
+./test_dfs/*
+./submissions/*
+./trained_models/*
+./confusion_matrices/*
+./notebooks/*
+./pdfs/*
+
+log/
+inputs/
+test_dfs/
+submissions/
+trained_models/
+confusion_matrices/
+notebooks/
+pdfs/

@@ -35,8 +35,8 @@ plt.switch_backend('agg')
 BASE_DIR = '/home/naoya.taguchi/.kaggle/competitions/PLAsTiCC-2018/'
 #BASE_DIR = '/Users/naoya.taguchi/.kaggle/competitions/PLAsTiCC-2018/'
 FOLD_NUM = 5
-# SAMPLING_LOWER = 60
-SAMPLING_LOWER = 10
+SAMPLING_LOWER = 60
+# SAMPLING_LOWER = 10
 SAMPLING_LOWER_RATE = 2.
 
 

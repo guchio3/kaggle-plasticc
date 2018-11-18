@@ -15,5 +15,6 @@ trained_models/
 confusion_matrices/
 notebooks/
 pdfs/
+importances/
 
 *.pyc

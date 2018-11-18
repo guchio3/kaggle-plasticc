@@ -116,6 +116,20 @@ def display_importances(feature_importance_df_,
 #    plt.savefig(filename + '.png')
 
 
+def save_importance(df, filename):
+    df.set_index('feature', inplace=True)
+    imp_mean = df.mean(axis=1)
+    imp_std = df.std(axis=1)
+    df['importance_mean'] = imp_mean
+    df['importance_std'] = imp_std
+    df.reset_index(inplace=True)
+    plt.figure(figsize=(8, 30))
+    sns.barplot(x="importance_mean", y="feature", data=df.sort_values(by="importance_mean", ascending=False))
+    plt.title('LightGBM Features (avg over folds)')
+    plt.tight_layout()
+    plt.savefig(filename)
+
+
 def plt_confusion_matrics():
     1 + 1
 
@@ -170,6 +184,12 @@ def main(args):
     # logger.info('the shape of train_df : {}'.format(train_df.shape))
     logger.debug('the cols of train_df : {}'.
                 format(train_df.drop('target', axis=1).columns.tolist()))
+#    categotical_features = ['passband_maxes_argmaxes', ]
+#    categorical_features_idx = np.argwhere(train_df.drop('target', axis=1).columns == 'passband_maxes_argmaxes')[0]
+#    logger.debug('categorical features are : {}'.format(categotical_features))
+#    logger.debug('categorical features indexes are : {}'.format(categotical_features))
+#    PARAMS['categorical_feature'] = categorical_features_idx
+
 
     if False:  # args.with_test:
         cv_hist = lightgbm.cv(
@@ -224,6 +244,7 @@ def main(args):
         y_train = le.transform(train_df['target'].values)
         train_columns = train_df.drop('target', axis=1).columns
         feature_importance_df = pd.DataFrame()
+        feature_importance_df['feature'] = train_columns
         conf_y_true = []
         conf_y_pred = []
         i = 1
@@ -262,10 +283,10 @@ def main(args):
             trained_models.append(booster)
             fold_importance_df = pd.DataFrame()
             fold_importance_df["feature"] = train_columns
-            fold_importance_df["importance"] = booster.feature_importance('gain')
-            fold_importance_df["fold"] = i
-            feature_importance_df = pd.concat(
-                [feature_importance_df, fold_importance_df], axis=0)
+            fold_importance_df["importance_{}".format(i)] = booster.feature_importance('gain')
+            feature_importance_df = feature_importance_df.merge(fold_importance_df, on='feature', how='left')
+            #feature_importance_df = pd.concat(
+            #    [feature_importance_df, fold_importance_df], axis=0)
             val_pred_score = softmax(booster.predict(x_val, raw_score=False))
             team_score = calc_team_score(y_val, val_pred_score)
             logger.info('team score : {}'.format(team_score))
@@ -286,7 +307,15 @@ def main(args):
                     start_time, )
         logger.info('saving models to {} ...'.format(models_path))
         save_models(trained_models, models_path)
-        conf_path = './confusion_matrices/{}_weight-multi-logloss-{:.6}_{}.png'\
+
+        imp_path = './importances/{}_weight-multi-logloss-{:.6}_{}_importance.png'\
+            .format(trained_models[0].__class__.__name__,
+                    mean_best_score,
+                    start_time, )
+        logger.info('saving importance to {} ...'.format(models_path))
+        save_importance(feature_importance_df, imp_path)
+
+        conf_path = './confusion_matrices/{}_weight-multi-logloss-{:.6}_{}_confusion.png'\
             .format(trained_models[0].__class__.__name__,
                     mean_best_score,
                     start_time, )
@@ -392,9 +421,11 @@ def main(args):
                           axis=0),
                   10**(-15), 1 - 10**(-15))
             preds_99 = np.ones((res.shape[0]))
-            for i in range(res.shape[1]):
-                preds_99 *= (1 - res[:, i])
-            preds_99 = 0.14 * preds_99 / np.mean(preds_99)
+            #for i in range(res.shape[1]):
+            #    preds_99 *= (1 - res[:, i])
+            #preds_99 = 0.14 * preds_99 / np.mean(preds_99)
+            res *= 8/9
+            preds_99 = 1/9
 
             # res = np.concatenate((res, preds_99), axis=1)
             # res = np.concatenate((res, np.zeros((res.shape[0], 1))), axis=1)

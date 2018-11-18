@@ -53,7 +53,7 @@ def split_dfs(df, nthread, logger, save_flg=False):
 def load_test_set_dfs(nthread, logger):
     logger.info('loading dfs...')
     dfs_paths = [
-        '/home/naoya.taguchi/workspace/kaggle/plasticc-2018/test_dfs/{}.fth'.format(i) for i in range(62)]
+        '/home/naoya.taguchi/workspace/kaggle/plasticc-2018_after_pack/test_dfs/{}.fth'.format(i) for i in range(62)]
     p = Pool(nthread)
     dfs = p.map(pd.read_feather, dfs_paths)
     p.close()
@@ -192,6 +192,23 @@ def get_starter_features(_id_grouped_df):
     beyond = beyond_1std(f, m)
     return m, std, amp, mad, beyond
 
+def get_flux_mjd_diff(df):
+    return df.flux.diff()/df.mjd.diff()
+
+def get_flux_mjd_diff_mean(df):
+    return get_flux_mjd_diff(df).mean()
+
+def get_flux_mjd_diff_max(df):
+    return get_flux_mjd_diff(df).max()
+
+def get_flux_mjd_diff_min(df):
+    return get_flux_mjd_diff(df).min()
+
+def get_flux_mjd_diff_std(df):
+    return get_flux_mjd_diff(df).std()
+
+def get_flux_mjd_diff_var(df):
+    return get_flux_mjd_diff(df).var()
 
 def diff_mean(x):
     return x.diff().mean()
@@ -303,22 +320,23 @@ def _for_set_df(set_df):
     passband_aggregations = {
         # 'mjd': [diff_mean, diff_max],
         # 'phase': [diff_mean, diff_max],
-        'flux': ['min', 'max', 'count', 'var', 'mean', 'skew', kurtosis, quantile10, quantile25, quantile75, quantile90, quantile2575_range, quantile1090_range],
+        'flux': ['min', 'max', 'count', 'var', 'mean', 'skew', kurtosis, quantile10,quantile25, quantile75, quantile90, quantile2575_range, quantile1090_range],
         'normed_flux': [diff_mean, ],
         #'flux_err': ['min', 'max', 'mean', 'median', 'std', 'var', 'skew', kurtosis],
 #        'flux_err': ['var'],
         'detected': ['mean', ],
-        'flux_ratio_sq': ['sum', 'skew'],
+        'flux_ratio_sq': ['sum', 'skew', ],
         'flux_by_flux_ratio_sq': ['sum', 'skew'],
     }
 
     band_std_upper_flux_aggregations = {
-        'mjd': [get_max_min_diff, 'var', 'skew', ],
+        'mjd': [get_max_min_diff, 'var', 'skew', diff_mean],
 #        'flux_err': ['min', 'max', 'mean', 'median', 'std', 'var', 'skew', kurtosis],
 #        'diff_from_flux_abs_std': ['var'],
-        'flux': ['count', ],
+        'flux': ['count', diff_mean],
         # 'mjd': ['min', 'max', 'var', ],
         # 'diff_flux_by_diff_mjd': ['min', 'max', 'var'],
+        # 'flux_mjd_diff_rat': [quantile10, quantile25, quantile75, quantile90, quantile2575_range, quantile1090_range],
     }
 
     # === run aggregations ===
@@ -430,6 +448,16 @@ def _for_set_df(set_df):
     for passband in passbands:
         # _passband_set_df = normalize_flux(set_df[set_df.passband == passband])
         _passband_set_df = set_df[set_df.passband == passband]
+        flux_mjd_diff_rat = _passband_set_df.groupby('object_id').apply(lambda x: x.flux.diff()/x.mjd.diff())
+        flux_mjd_diff_rat = flux_mjd_diff_rat.reset_index().\
+                drop(['level_1', 'object_id'], axis=1).\
+                rename(columns={0: 'flux_mjd_diff_rat'})
+        _passband_set_df = pd.concat([_passband_set_df, flux_mjd_diff_rat], axis=1)
+        flux_mjd_diff_rat_rat = _passband_set_df.groupby('object_id').apply(lambda x: x.flux_mjd_diff_rat.diff()/x.mjd.diff())
+        flux_mjd_diff_rat_rat = flux_mjd_diff_rat_rat.reset_index().\
+                drop(['level_1', 'object_id'], axis=1).\
+                rename(columns={0: 'flux_mjd_diff_rat_rat'})
+        _passband_set_df = pd.concat([_passband_set_df, flux_mjd_diff_rat_rat], axis=1)
         # starter kit type fe
         starter_fe_series = _passband_set_df.\
             groupby('object_id').\
@@ -563,6 +591,19 @@ def _for_set_df(set_df):
     for passband_flux_max in passband_flux_maxes:
         fe_set_df[passband_flux_max + '_ratio_to_the_max'] = \
             fe_set_df[passband_flux_max] / fe_set_df['flux_max']
+#    passband_maxes = fe_set_df[passband_flux_maxes].values
+#    passband_maxes_argmaxes = np.argmax(passband_maxes, axis=1)
+#    fe_set_df['passband_maxes_argmaxes'] = passband_maxes_argmaxes
+#        fe_set_df[passband_flux_max + '_from_the_max'] = \
+#             fe_set_df['flux_max'] - fe_set_df[passband_flux_max]
+#    passband_flux_maxes_from_the_max = \
+#        ['band-{}_flux_max_from_the_max'.format(i) for i in passbands]
+#    passband_flux_maxes_from_the_max_value = fe_set_df[passband_flux_maxes_from_the_max].values
+#    passband_flux_maxes_from_the_max_value.sort(axis=1)
+#    fe_set_df['2nd_passband_flux_max_diff'] = passband_flux_maxes_from_the_max_value[:,1]
+#    fe_set_df['3rd_passband_flux_max_diff'] = passband_flux_maxes_from_the_max_value[:,2]
+#    fe_set_df['2nd_passband_flux_max_diff_rat'] = fe_set_df['2nd_passband_flux_max_diff'] / fe_set_df.flux_max
+#    fe_set_df['3rd_passband_flux_max_diff_rat'] = fe_set_df['3rd_passband_flux_max_diff'] / fe_set_df.flux_max
     passband_flux_mins = \
         ['band-{}_flux_min'.format(i) for i in passbands]
     fe_set_df['passband_flux_min_var'] = \
@@ -591,6 +632,15 @@ def _for_set_df(set_df):
     # fe_set_df['passband_flux_ratio_sq_skew_var'] = \
     #    fe_set_df[passband_flux_ratio_sq_skew].var(axis=1)
     # band $B$N7gB;N($N(B var $B$H$+$bNI$5$=$&(B
+    passband_flux_vars = \
+        ['band-{}_flux_var'.format(i) for i in passbands]
+    passband_flux_diffs = \
+        ['band-{}_flux_diff'.format(i) for i in passbands]
+    fe_set_df['band_flux_diff_max'] = fe_set_df[passband_flux_diffs].max(axis=1)
+    fe_set_df['band_flux_diff_min'] = fe_set_df[passband_flux_diffs].min(axis=1)
+    fe_set_df['band_flux_diff_diff'] = fe_set_df['band_flux_diff_max'] - fe_set_df['band_flux_diff_min']
+    fe_set_df['band_flux_diff_diff_rat'] = fe_set_df['band_flux_diff_diff'] / fe_set_df['band_flux_diff_max']
+    fe_set_df['band_flux_max_min_rat'] = fe_set_df['band_flux_diff_min'] / fe_set_df['band_flux_diff_max']
 
     # $B:G8e$K$$$i$J$$(B features $B$r(B drop $B$9$k$H$3$m(B
     drop_cols = [
@@ -600,6 +650,7 @@ def _for_set_df(set_df):
     drop_cols += passband_flux_maxes
     drop_cols += passband_flux_mins
     drop_cols += passband_flux_means
+#    drop_cols += passband_flux_maxes_from_the_max
 #    drop_cols += passband_flux_ratio_sq_sum
     fe_set_df.drop(drop_cols, axis=1, inplace=True)
 

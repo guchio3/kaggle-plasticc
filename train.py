@@ -36,7 +36,7 @@ BASE_DIR = '/home/naoya.taguchi/.kaggle/competitions/PLAsTiCC-2018/'
 #BASE_DIR = '/Users/naoya.taguchi/.kaggle/competitions/PLAsTiCC-2018/'
 FOLD_NUM = 5
 # SAMPLING_LOWER = 60
-SAMPLING_LOWER = 60
+SAMPLING_LOWER = 10
 SAMPLING_LOWER_RATE = 2.
 
 
@@ -299,7 +299,8 @@ def main(args):
         cm_df = pd.DataFrame(cm, index=classes, columns=classes)
         cm_df[cm_df.columns] = cm_df.values / cm_df.sum(axis=1).values.reshape(-1, 1)
         plt.figure(figsize=(14, 14))
-        sns.heatmap(cm_df, annot=True)
+        sns.heatmap(cm_df, annot=True, cmap=plt.cm.Blues)
+        #plt.imshow(cm_df.values, interpolat='nearest', cmap=plt.cm.Blues)
         plt.title('score : {}'.format(mean_best_score))
         plt.ylabel('True label')
         plt.xlabel('Predicted label')

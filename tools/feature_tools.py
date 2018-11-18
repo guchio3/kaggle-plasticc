@@ -313,6 +313,7 @@ def _for_set_df(set_df):
     band_std_upper_flux_aggregations = {
         'mjd': [get_max_min_diff, 'var', 'skew', ],
 #        'flux_err': ['min', 'max', 'mean', 'median', 'std', 'var', 'skew', kurtosis],
+#        'diff_from_flux_abs_std': ['var'],
         'flux': ['count', ],
         # 'mjd': ['min', 'max', 'var', ],
     }
@@ -438,6 +439,24 @@ def _for_set_df(set_df):
                 4: 'band-{}_beyond_1std'.format(passband),
             })
 
+        # std upper type fe for each passband
+        band_object_flux_std_df = _passband_set_df[['object_id', 'flux']].\
+            groupby('object_id').\
+            std().\
+            abs().\
+            rename(columns={'flux': 'flux_abs_std'})
+        _passband_set_df = _passband_set_df.merge(
+            band_object_flux_std_df, on='object_id', how='left')
+        band_std_upper_flux_df = _passband_set_df[_passband_set_df.flux >
+                                                abs(_passband_set_df.flux_abs_std)]
+        band_std_upper_flux_df['diff_from_flux_abs_std'] =\
+                band_std_upper_flux_df.flux - band_std_upper_flux_df.flux_abs_std
+        band_fe_std_upper_flux_df = band_std_upper_flux_df.groupby('object_id').\
+            agg({**band_std_upper_flux_aggregations})
+        band_fe_std_upper_flux_df.columns = pd.Index(
+            ['band-{}_std_upper_'.format(passband) + e[0] + "_" + e[1]
+                for e in band_fe_std_upper_flux_df.columns.tolist()])
+
         # aggregation type fe
         band_fe_set_df = _passband_set_df.\
             groupby('object_id').\
@@ -449,37 +468,26 @@ def _for_set_df(set_df):
             band_fe_set_df['band-{}_flux_max'.format(passband)] - \
             band_fe_set_df['band-{}_flux_min'.format(passband)]
 
-        # std upper type fe for each passband
-        band_object_flux_std_df = _passband_set_df[['object_id', 'flux']].\
-            groupby('object_id').\
-            std().\
-            abs().\
-            rename(columns={'flux': 'flux_abs_std'})
-        band_std_upper_flux_df = _passband_set_df.merge(
-            band_object_flux_std_df, on='object_id', how='left')
-        band_std_upper_flux_df = band_std_upper_flux_df[band_std_upper_flux_df.flux >
-                                                abs(band_std_upper_flux_df.flux_abs_std)]
-        band_fe_std_upper_flux_df = band_std_upper_flux_df.groupby('object_id').\
-            agg({**band_std_upper_flux_aggregations})
-        band_fe_std_upper_flux_df.columns = pd.Index(
-            ['band-{}_std_upper_'.format(passband) + e[0] + "_" + e[1]
-                for e in band_fe_std_upper_flux_df.columns.tolist()])
-
         # feature $B2aB?$J$N$G(B drop
         passband_df = passband_df.merge(
             starter_fe_df, on='object_id', how='left')
         passband_df = passband_df.merge(
             band_fe_set_df, on='object_id', how='left')
+        passband_df = passband_df.merge(
+            band_fe_std_upper_flux_df,
+            on='object_id',
+            how='left')
+
+        # fe after agg merge
         passband_df['band-{}_flux_count'.format(passband)] = \
             passband_df['band-{}_flux_count'.format(passband)]\
             / passband_df['flux_count']
 #        passband_df['band-{}_flux_mean_diff'.format(passband)] = \
 #            passband_df['flux_mean'.format(passband)] - \
 #            passband_df['band-{}_flux_mean'.format(passband)]
-        passband_df = passband_df.merge(
-            band_fe_std_upper_flux_df,
-            on='object_id',
-            how='left')
+###        passband_df['band-{}_std_upper_count_rat'.format(passband)] = \
+###            passband_df['band-{}_std_upper_flux_count'.format(passband)]\
+###            / passband_df['band-{}_flux_count'.format(passband)]
         gc.collect()
 
     # feature engineering for passband_df
@@ -539,7 +547,7 @@ def _for_set_df(set_df):
         fe_set_df['corrected_flux_ratio_sq_sum']
     fe_set_df['corrected_flux_dif3'] = (fe_set_df['corrected_flux_max'] - fe_set_df['corrected_flux_min'])\
         / fe_set_df['corrected_flux_w_mean']
-    fe_set_df['mean_upper_rat'] = fe_set_df['std_upper_flux_count'] / fe_set_df['flux_count']
+    fe_set_df['std_upper_rat'] = fe_set_df['std_upper_flux_count'] / fe_set_df['flux_count']
 
     passband_flux_maxes = \
         ['band-{}_flux_max'.format(i) for i in passbands]

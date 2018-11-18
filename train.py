@@ -72,7 +72,7 @@ def get_params(args):
         'learning_rate': 0.4,
         #        'learning_rate': 0.02,
         #        'num_leaves': 32,
-        'max_depth': 5,
+        'max_depth': 3,
         'subsample': .9,
         'colsample_bytree': .7,
         'reg_alpha': .01,

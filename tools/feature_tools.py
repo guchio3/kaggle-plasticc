@@ -12,6 +12,7 @@ import cesium.featurize as featurize
 
 
 warnings.simplefilter('ignore', RuntimeWarning)
+warnings.filterwarnings('ignore')
 np.random.seed(71)
 
 
@@ -274,6 +275,7 @@ def _for_set_df(set_df):
         #        'minused_flux': ['min', 'max', 'mean', 'median',
         #                         'std', 'var', 'skew'],
         #        'normed_flux': ['mean', 'median', 'skew'],
+        'diff_flux_by_diff_mjd': ['min', 'max', 'var', ],
     }
 
     detected_aggregations = {
@@ -316,6 +318,7 @@ def _for_set_df(set_df):
 #        'diff_from_flux_abs_std': ['var'],
         'flux': ['count', ],
         # 'mjd': ['min', 'max', 'var', ],
+        # 'diff_flux_by_diff_mjd': ['min', 'max', 'var'],
     }
 
     # === run aggregations ===
@@ -328,6 +331,8 @@ def _for_set_df(set_df):
         set_df['corrected_flux'] / set_df['flux_err'], 2.0)
     set_df['corrected_flux_by_flux_ratio_sq'] = set_df['corrected_flux'] * \
         set_df['flux_ratio_sq']
+#    set_df['diff_flux_by_diff_mjd'] =\
+#        set_df['flux'].diff() / set_df['mjd'].diff()
 
     fe_set_df = set_df.groupby('object_id').agg({**aggregations})
     fe_set_df.columns = pd.Index(
@@ -451,6 +456,8 @@ def _for_set_df(set_df):
                                                 abs(_passband_set_df.flux_abs_std)]
         band_std_upper_flux_df['diff_from_flux_abs_std'] =\
                 band_std_upper_flux_df.flux - band_std_upper_flux_df.flux_abs_std
+        # band_std_upper_flux_df['diff_flux_by_diff_mjd'.format(passband)] =\
+        #         band_std_upper_flux_df['flux'].diff() / band_std_upper_flux_df['mjd'].diff()
         band_fe_std_upper_flux_df = band_std_upper_flux_df.groupby('object_id').\
             agg({**band_std_upper_flux_aggregations})
         band_fe_std_upper_flux_df.columns = pd.Index(

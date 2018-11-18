@@ -275,7 +275,7 @@ def _for_set_df(set_df):
         #        'minused_flux': ['min', 'max', 'mean', 'median',
         #                         'std', 'var', 'skew'],
         #        'normed_flux': ['mean', 'median', 'skew'],
-        'diff_flux_by_diff_mjd': ['min', 'max', 'var', ],
+        # 'diff_flux_by_diff_mjd': ['min', 'max', 'var', ],
     }
 
     detected_aggregations = {

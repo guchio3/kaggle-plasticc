@@ -707,9 +707,15 @@ def feature_engineering(set_df, set_metadata_df, nthread,
     res_df = set_metadata_df.merge(set_res_df, on='object_id', how='left')
     res_df['internal'] = res_df.hostgal_photoz == 0.
     # res_df['hostgal_photoz_square'] = np.power(res_df.hostgal_photoz, 2)
+    # res_df['detected_mjd_get_max_min_diff_corrected'] =\
+            # res_df['detected_mjd_get_max_min_diff'] / (1 + res_df['hostgal_photoz'])
     res_df.drop(['object_id', 'hostgal_specz', 'hostgal_photoz', 'ra', 'decl',
                  'gal_l', 'gal_b', 'ddf', 'mwebv'], axis=1, inplace=True)
 
+    #feats_df = pd.read_csv('./importances/Booster_weight-multi-logloss-0.579991_2018-11-20-13-06-10_importance.csv')
+    feats_df = pd.read_csv('./importances/Booster_weight-multi-logloss-0.579991_2018-11-20-13-16-50_importance.csv')
+    #res_df = res_df.drop(list(reversed(feats_df.feature.tolist()))[:170], axis=1)
+    res_df = res_df.drop(feats_df.feature.tolist()[:170], axis=1)
     del set_res_df
     gc.collect()
     return res_df

@@ -122,6 +122,8 @@ def save_importance(df, filename):
     imp_std = df.std(axis=1)
     df['importance_mean'] = imp_mean
     df['importance_std'] = imp_std
+    df['importance_cov'] = df['importance_std'] / df['importance_mean']
+    df.sort_values(by="importance_cov", ascending=True).to_csv(filename[:-4] + '.csv')
     df.reset_index(inplace=True)
     plt.figure(figsize=(8, 30))
     sns.barplot(x="importance_mean", y="feature", data=df.sort_values(by="importance_mean", ascending=False))

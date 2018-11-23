@@ -306,14 +306,14 @@ def _for_set_df(set_df):
     mean_upper_flux_aggregations = {
         'mjd': [get_max_min_diff, 'var', 'skew', ],
 #        'flux_err': ['min', 'max', 'mean', 'median', 'std', 'var', 'skew', kurtosis],
-        'flux': ['count', ],
+        'flux': ['count'],
         # 'mjd': ['min', 'max', 'var', ],
     }
 
     std_upper_flux_aggregations = {
         'mjd': [get_max_min_diff, 'var', 'skew', ],
 #        'flux_err': ['min', 'max', 'mean', 'median', 'std', 'var', 'skew', kurtosis],
-        'flux': ['count', ],
+        'flux': ['count', 'min'],
         # 'mjd': ['min', 'max', 'var', ],
     }
 #quantile10, quantile25, quantile75, quantile90, quantile2575_range, quantile1090_range
@@ -333,7 +333,7 @@ def _for_set_df(set_df):
         'mjd': [get_max_min_diff, 'var', 'skew', diff_mean],
 #        'flux_err': ['min', 'max', 'mean', 'median', 'std', 'var', 'skew', kurtosis],
 #        'diff_from_flux_abs_std': ['var'],
-        'flux': ['count', diff_mean],
+        'flux': ['count', diff_mean, ],
         # 'mjd': ['min', 'max', 'var', ],
         # 'diff_flux_by_diff_mjd': ['min', 'max', 'var'],
         # 'flux_mjd_diff_rat': [quantile10, quantile25, quantile75, quantile90, quantile2575_range, quantile1090_range],
@@ -390,10 +390,17 @@ def _for_set_df(set_df):
         std().\
         abs().\
         rename(columns={'flux': 'flux_abs_std'})
+    object_flux_mean_df = set_df[['object_id', 'flux']].\
+        groupby('object_id').\
+        mean().\
+        rename(columns={'flux': 'flux_mean'})
     std_upper_flux_df = set_df.merge(
         object_flux_std_df, on='object_id', how='left')
+    std_upper_flux_df = std_upper_flux_df.merge(
+        object_flux_mean_df, on='object_id', how='left')
     std_upper_flux_df = std_upper_flux_df[std_upper_flux_df.flux >
-                                            abs(std_upper_flux_df.flux_abs_std)]
+                                            abs(std_upper_flux_df.flux_abs_std) + 
+                                            std_upper_flux_df.flux_mean]
     fe_std_upper_flux_df = std_upper_flux_df.groupby('object_id').\
         agg({**std_upper_flux_aggregations})
     fe_std_upper_flux_df.columns = pd.Index(
@@ -478,10 +485,17 @@ def _for_set_df(set_df):
             std().\
             abs().\
             rename(columns={'flux': 'flux_abs_std'})
+        band_object_flux_mean_df = _passband_set_df[['object_id', 'flux']].\
+            groupby('object_id').\
+            mean().\
+            rename(columns={'flux': 'flux_mean'})
         _passband_set_df = _passband_set_df.merge(
             band_object_flux_std_df, on='object_id', how='left')
+        _passband_set_df = _passband_set_df.merge(
+            band_object_flux_mean_df, on='object_id', how='left')
         band_std_upper_flux_df = _passband_set_df[_passband_set_df.flux >
-                                                abs(_passband_set_df.flux_abs_std)]
+                                                abs(_passband_set_df.flux_abs_std) + 
+                                                _passband_set_df.flux_mean]
         band_std_upper_flux_df['diff_from_flux_abs_std'] =\
                 band_std_upper_flux_df.flux - band_std_upper_flux_df.flux_abs_std
         # band_std_upper_flux_df['diff_flux_by_diff_mjd'.format(passband)] =\
@@ -713,9 +727,9 @@ def feature_engineering(set_df, set_metadata_df, nthread,
                  'gal_l', 'gal_b', 'ddf', 'mwebv'], axis=1, inplace=True)
 
     #feats_df = pd.read_csv('./importances/Booster_weight-multi-logloss-0.579991_2018-11-20-13-06-10_importance.csv')
-    feats_df = pd.read_csv('./importances/Booster_weight-multi-logloss-0.579991_2018-11-20-13-16-50_importance.csv')
+    #feats_df = pd.read_csv('./importances/Booster_weight-multi-logloss-0.579991_2018-11-20-13-16-50_importance.csv')
     #res_df = res_df.drop(list(reversed(feats_df.feature.tolist()))[:170], axis=1)
-    res_df = res_df.drop(feats_df.feature.tolist()[:170], axis=1)
+    #res_df = res_df.drop(feats_df.feature.tolist()[:170], axis=1)
     del set_res_df
     gc.collect()
     return res_df

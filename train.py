@@ -393,6 +393,7 @@ def main(args):
 #                nthread=args.nthread,
 #                test_flg=True,
 #                logger=logger)
+            test_df.reset_index().to_feather('./test_dfs/test_df_for_nn.fth')
             x_test = test_df.values
 
             logger.info('predicting')

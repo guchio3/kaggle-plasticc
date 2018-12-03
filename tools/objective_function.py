@@ -182,3 +182,27 @@ def calc_team_score(y_true, y_preds):
         + (class99_weight/(np.sum(class_arr)+class99_weight))*(-np.log(class99_prob))
 
     return score
+
+
+def wloss_metric_for_zeropad(preds, train_data, gal_cols, ext_gal_cols, gal_rows, ext_gal_rows):
+    classes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+    class_weight = {6: 1, 15: 2, 16: 1, 42: 1, 52: 1, 53: 1, 62: 1, 64: 2, 65: 1, 67: 1, 88: 1, 90: 1, 92: 1, 95: 1}
+    weight_tensor = torch.tensor(list(class_weight.values()),
+                             requires_grad=False).type(torch.FloatTensor)
+    y_t = torch.tensor(train_data.get_label(), requires_grad=False).type(torch.LongTensor)
+    y_h = torch.zeros(
+        y_t.shape[0], len(classes), requires_grad=False).scatter(1, y_t.reshape(-1, 1), 1)
+    y_h /= y_h.sum(dim=0, keepdim=True)
+    y_p = torch.tensor(preds, requires_grad=False).type(torch.FloatTensor)
+    if len(y_p.shape) == 1:
+        y_p = y_p.reshape(len(classes), -1).transpose(0, 1)
+    p = pd.DataFrame(torch.softmax(y_p, dim=0).numpy())
+    p.loc[ext_gal_rows, gal_cols] = 0.
+    p.loc[gal_rows, ext_gal_cols] = 0.
+    p = np.clip(a=p.values/np.sum(p.values, axis=1).reshape((-1, 1)), a_min=1e-15, a_max=1 - 1e-15)
+    ln_p = np.log(p)
+    ln_p = torch.tensor(ln_p, requires_grad=False).type(torch.FloatTensor)
+#    ln_p = torch.log_softmax(y_p, dim=1)
+    wll = torch.sum(y_h * ln_p, dim=0)
+    loss = -torch.dot(weight_tensor, wll) / torch.sum(weight_tensor)
+    return loss.numpy() * 1.

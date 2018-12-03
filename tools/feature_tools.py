@@ -9,6 +9,7 @@ from tqdm import tqdm
 import warnings
 
 import cesium.featurize as featurize
+from tsfresh.feature_extraction import extract_features
 
 
 warnings.simplefilter('ignore', RuntimeWarning)
@@ -675,6 +676,52 @@ def _for_set_df(set_df):
     return fe_set_df
 
 
+def get_tsfresh_feats(set_df, nthread):
+    # tsfresh features
+    fcp = {
+        'flux': {
+            'longest_strike_above_mean': None,
+            'longest_strike_below_mean': None,
+            'mean_change': None,
+            'mean_abs_change': None,
+            'length': None,
+#            'number_peaks': [{'n': 1}],
+#            'fft_coefficient': [
+#                    {'coeff': 0, 'attr': 'abs'}, 
+#                    {'coeff': 1, 'attr': 'abs'}
+#                ],
+#            'binned_entropy': [{'max_bin': 20}],
+#            'agg_linear_trend': None,
+#            'number_cwt_peaks': None,
+        },
+                
+        'flux_by_flux_ratio_sq': {
+            'longest_strike_above_mean': None,
+            'longest_strike_below_mean': None,       
+        },
+                
+        'mjd': {
+            'maximum': None, 
+            'minimum': None,
+            'mean_change': None,
+            'mean_abs_change': None,
+        },
+    }
+    # ts_flesh features
+    #fcp = {'fft_coefficient': [{'coeff': 0, 'attr': 'abs'},{'coeff': 1, 'attr': 'abs'}],
+    #       'kurtosis' : None, 
+    #       'skewness' : None}
+    agg_df_ts = extract_features(
+            set_df, 
+            column_id='object_id', 
+            column_sort='mjd', 
+            column_kind='passband', 
+            column_value = 'flux', 
+            default_fc_parameters = fcp['flux'], 
+            n_jobs=nthread)
+    return agg_df_ts
+
+
 def feature_engineering(set_df, set_metadata_df, nthread,
                         logger, test_flg=False):
     logger.info('getting split dfs ...')
@@ -696,6 +743,13 @@ def feature_engineering(set_df, set_metadata_df, nthread,
     p.join()
     set_res_df = pd.concat(set_res_list, axis=0)
     gc.collect()
+
+    if test_flg:
+        ts_set_df = pd.read_feather('/home/naoya.taguchi/.kaggle/competitions/PLAsTiCC-2018/' + 'test_set.fth', nthreads=nthread)
+    else:
+        ts_set_df = pd.read_csv('/home/naoya.taguchi/.kaggle/competitions/PLAsTiCC-2018/' + 'training_set.csv')
+    tsfresh_df = get_tsfresh_feats(ts_set_df, nthread).reset_index().rename(columns={'id': 'object_id'})
+    set_res_df = set_res_df.merge(tsfresh_df, on='object_id', how='left')
 
     set_res_df.reset_index(inplace=True)
     # p = Pool(nthread)
@@ -720,17 +774,20 @@ def feature_engineering(set_df, set_metadata_df, nthread,
     logger.info('post processing ...')
     res_df = set_metadata_df.merge(set_res_df, on='object_id', how='left')
     res_df['internal'] = res_df.hostgal_photoz == 0.
+    #res_df['ihostcal_photoz_cetain'] = np.multiply(res_df['hostgal_photoz'].values, np.exp(res_df['hostgal_photoz_err'].values))
     # res_df['hostgal_photoz_square'] = np.power(res_df.hostgal_photoz, 2)
     # res_df['detected_mjd_get_max_min_diff_corrected'] =\
             # res_df['detected_mjd_get_max_min_diff'] / (1 + res_df['hostgal_photoz'])
-    res_df.drop(['object_id', 'hostgal_specz', 'hostgal_photoz', 'ra', 'decl',
-                 'gal_l', 'gal_b', 'ddf', 'mwebv'], axis=1, inplace=True)
+    #res_df.drop(['object_id', 'hostgal_specz', 'hostgal_photoz', 'ra', 'decl',
+    res_df.drop(['hostgal_specz', 'hostgal_photoz', 'ra', 'decl',
+                 'gal_l', 'gal_b', 'ddf', 'mwebv', 'index'], axis=1, inplace=True)
 
     #feats_df = pd.read_csv('./importances/Booster_weight-multi-logloss-0.579991_2018-11-20-13-06-10_importance.csv')
-    #feats_df = pd.read_csv('./importances/Booster_weight-multi-logloss-0.579991_2018-11-20-13-16-50_importance.csv')
-    #res_df = res_df.drop(list(reversed(feats_df.feature.tolist()))[:170], axis=1)
+    #feats_df = pd.read_csv('./importances/Booster_weight-multi-logloss-0.577933_2018-11-29-19-53-14_importance.csv')
+    #res_df = res_df.drop(list(reversed(feats_df.feature.tolist()))[:132], axis=1)
     #res_df = res_df.drop(feats_df.feature.tolist()[:170], axis=1)
+    #res_df = res_df.replace(np.inf, np.nan)
+    #res_df = res_df.replace(-np.inf, np.nan)
     del set_res_df
     gc.collect()
     return res_df
-

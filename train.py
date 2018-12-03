@@ -18,7 +18,7 @@ import seaborn as sns
 
 from tools.my_logging import logInit
 from tools.feature_tools import feature_engineering
-from tools.objective_function import weighted_multi_logloss, lgb_multi_weighted_logloss, wloss_objective, wloss_metric, softmax, calc_team_score
+from tools.objective_function import weighted_multi_logloss, lgb_multi_weighted_logloss, wloss_objective, wloss_metric, softmax, calc_team_score, wloss_metric_for_zeropad
 from tools.model_io import save_models, load_models
 from tools.fold_resampling import get_fold_resampling_dict
 
@@ -86,6 +86,10 @@ def get_params(args):
         'seed': 71,
 #        'early_stopping_rounds': 100,
         #        'min_data_in_leaf': 30,
+        'max_bin': 20,
+#        'min_data_in_leaf': 300,
+#        'bagging_fraction': 0.1, 
+#        'bagging_freq': 10, 
     }
     return PARAMS
 
@@ -166,6 +170,10 @@ def main(args):
         nthread=args.nthread,
         logger=logger)
 
+    with open('./lcfit/LCfit_features_train_20181129.pkl', 'rb') as fin:
+        train_df = train_df.merge(pickle.load(fin), on='object_id', how='left')
+    train_df.drop('object_id', axis=1, inplace=True)
+
     # label encoding しないと lgbm が認識してくれない
     # 若い class に 若い label がつくと良いんだけど...
     le = LabelEncoder()
@@ -240,11 +248,15 @@ def main(args):
     else:
         best_scores = []
         team_scores = []
+        zeropad_scores = []
+        val_pred_score_zeropads = []
         trained_models = []
         best_iterations = []
+        oof = []
         x_train = train_df.drop('target', axis=1).values
         y_train = le.transform(train_df['target'].values)
         train_columns = train_df.drop('target', axis=1).columns
+        distmod_col = np.where(train_columns == 'distmod')[0]
         feature_importance_df = pd.DataFrame()
         feature_importance_df['feature'] = train_columns
         conf_y_true = []
@@ -290,9 +302,24 @@ def main(args):
             #feature_importance_df = pd.concat(
             #    [feature_importance_df, fold_importance_df], axis=0)
             val_pred_score = softmax(booster.predict(x_val, raw_score=False))
+            val_pred_score_zeropad = booster.predict(x_val, raw_score=False)
+            oof.append([val_pred_score_zeropad, y_val])
+            gal_cols = [0, 2, 5, 8, 12]
+            ext_gal_cols = [1, 3, 4, 6, 7, 9, 10, 11, 13]
+            gal_rows = np.where(np.isnan(np.array(x_val[:, distmod_col], dtype=float)))[0]
+            ext_gal_rows = np.where(~np.isnan(np.array(x_val[:, distmod_col], dtype=float)))[0]
+            #val_pred_score_zeropad.loc[ext_gal_rows, gal_cols] = 0.
+            #val_pred_score_zeropad.loc[gal_rows, ext_gal_cols] = 0.
+            zeropad_score = wloss_metric_for_zeropad(
+                    val_pred_score_zeropad, valid_dataset,
+                    gal_cols=gal_cols, ext_gal_cols=ext_gal_cols,
+                    gal_rows=gal_rows, ext_gal_rows=ext_gal_rows)
+            logger.info('zeropad score : {}'.format(zeropad_score))
             team_score = calc_team_score(y_val, val_pred_score)
             logger.info('team score : {}'.format(team_score))
             team_scores.append(team_score)
+            zeropad_scores.append(zeropad_score)
+            val_pred_score_zeropads.append(pd.concat([pd.DataFrame(val_pred_score_zeropad), pd.Series(y_val)], axis=1))
             conf_y_true.append(np.argmax(val_pred_score, axis=1))
             conf_y_pred.append(y_val)
             i += 1
@@ -300,9 +327,24 @@ def main(args):
         mean_best_score = np.mean(best_scores)
         mean_team_score = np.mean(team_scores)
         mean_best_iteration = np.mean(best_iterations)
+        mean_zeropads_score = np.mean(np.array(zeropad_scores, dtype=float))
         logger.info('mean valid score is {}'.format(mean_best_score))
         logger.info('mean team score is {}'.format(mean_team_score))
         logger.info('mean best iteration is {}'.format(mean_best_iteration))
+        #logger.info('mean zeropad score is {}'.format(mean_zeropads_score))
+        val_pred_score_zeropads_path = './val_pred_score_zeropads/{}_weight-multi-logloss-{:.6}_{}.pkl'\
+            .format(trained_models[0].__class__.__name__,
+                    mean_zeropads_score,
+                    start_time, )
+        with open(val_pred_score_zeropads_path, 'wb') as fout:
+            pickle.dump(val_pred_score_zeropads, fout)
+        oof_path = './oof/{}_weight-multi-logloss-{:.6}_{}.pkl'\
+            .format(trained_models[0].__class__.__name__,
+                    mean_best_score,
+                    start_time, )
+        with open(oof_path, 'wb') as fout:
+            pickle.dump(oof, fout)
+
         models_path = './trained_models/{}_weight-multi-logloss-{:.6}_{}.pkl'\
             .format(trained_models[0].__class__.__name__,
                     mean_best_score,
@@ -378,7 +420,7 @@ def main(args):
             logger.info('loading test_set_metadata.csv')
             test_set_metadata_df = pd.read_csv(
                 BASE_DIR + 'test_set_metadata.csv')
-            object_ids = test_set_metadata_df.object_id
+            # object_ids = test_set_metadata_df.object_id
 
             logger.info('feature engineering for test set...')
             test_df = feature_engineering(
@@ -387,14 +429,22 @@ def main(args):
                 nthread=args.nthread,
                 test_flg=True,
                 logger=logger)
+            with open('./lcfit/LCfit_features_test_20181130.pkl', 'rb') as fin:
+                test_df = test_df.merge(pickle.load(fin), on='object_id', how='left')
 #            test_df = feature_engineering(
 #                test_set_df,
 #                test_set_metadata_df,
 #                nthread=args.nthread,
 #                test_flg=True,
 #                logger=logger)
-            test_df.reset_index().to_feather('./test_dfs/test_df_for_nn.fth')
+            test_df.reset_index(drop=True).to_feather('./test_dfs/test_df_for_nn.fth')
+            test_df.drop('object_id', axis=1, inplace=True)
+
+            object_ids = test_df.object_id
+
+            logger.info(f'test cols {test_df.columns.tolist()}')
             x_test = test_df.values
+            logger.info(f'test size: {x_test.shape}')
 
             logger.info('predicting')
             test_reses = []
@@ -424,11 +474,11 @@ def main(args):
                           axis=0),
                   10**(-15), 1 - 10**(-15))
             preds_99 = np.ones((res.shape[0]))
-            #for i in range(res.shape[1]):
-            #    preds_99 *= (1 - res[:, i])
-            #preds_99 = 0.14 * preds_99 / np.mean(preds_99)
-            res *= 8/9
-            preds_99 = 1/9
+            for i in range(res.shape[1]):
+                preds_99 *= (1 - res[:, i])
+            preds_99 = 0.14 * preds_99 / np.mean(preds_99)
+            #res *= 8/9
+            #preds_99 = 1/9
 
             # res = np.concatenate((res, preds_99), axis=1)
             # res = np.concatenate((res, np.zeros((res.shape[0], 1))), axis=1)

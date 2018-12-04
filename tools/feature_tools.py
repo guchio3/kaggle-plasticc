@@ -497,8 +497,8 @@ def _for_set_df(set_df):
         band_std_upper_flux_df = _passband_set_df[_passband_set_df.flux >
                                                 abs(_passband_set_df.flux_abs_std) + 
                                                 _passband_set_df.flux_mean]
-        band_std_upper_flux_df['diff_from_flux_abs_std'] =\
-                band_std_upper_flux_df.flux - band_std_upper_flux_df.flux_abs_std
+        # band_std_upper_flux_df['diff_from_flux_abs_std'] =\
+        #         band_std_upper_flux_df.flux - band_std_upper_flux_df.flux_abs_std
         # band_std_upper_flux_df['diff_flux_by_diff_mjd'.format(passband)] =\
         #         band_std_upper_flux_df['flux'].diff() / band_std_upper_flux_df['mjd'].diff()
         band_fe_std_upper_flux_df = band_std_upper_flux_df.groupby('object_id').\

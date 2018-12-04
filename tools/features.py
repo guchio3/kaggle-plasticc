@@ -90,7 +90,7 @@ class featureCreator(metaclass=ABCMeta):
             ext_name = path.split('.')[-1]
             if ext_name == 'csv':
                 _df = pd.read_csv(path)
-            elif ext_name == 'ftr':
+            elif ext_name == 'ftr' or ext_name == 'fth':
                 _df = pd.read_feather(path, nthreads=self.nthread)
             elif ext_name == 'pkl':
                 with open(path, 'rb') as fin:

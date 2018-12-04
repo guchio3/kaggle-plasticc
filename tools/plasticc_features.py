@@ -9,6 +9,7 @@ from tqdm import tqdm
 import warnings
 
 import cesium.featurize as featurize
+from tsfresh.feature_extraction import extract_features
 
 from features import featureCreator, MulHelper, toapply
 
@@ -111,7 +112,6 @@ def quantile2575_range(x):
 
 def quantile1090_range(x):
     return quantile90(x) - quantile10(x)
-
 
 
 # =======================================
@@ -230,27 +230,178 @@ def fe_set_df_base(corrected_set_df):
     }
 
     fe_set_df = corrected_set_df.groupby('object_id').agg({**aggregations})
-    fe_set_df.columns = pd.Index( [e[0] + "_" + e[1] for e in fe_set_df.columns.tolist()])
+    fe_set_df.columns = pd.Index([e[0] + "_" + e[1] for e in fe_set_df.columns.tolist()])
     return fe_set_df
 
 
 def fe_set_df_detected(corrected_set_df): 
+    detected_corrected_set_df = corrected_set_df[corrected_set_df.detected == 1]
+
     detected_aggregations = {
         'mjd': [get_max_min_diff, 'skew'],
     }
-    fe_set_df = corrected_set_df.groupby('object_id').agg({**detected_aggregations})
-    fe_set_df.columns = pd.Index( [e[0] + "_" + e[1] for e in fe_set_df.columns.tolist()])
+
+    fe_set_df = detected_corrected_set_df.groupby('object_id').agg({**detected_aggregations})
+    fe_set_df.columns = pd.Index(['detected_' + e[0] + "_" + e[1] for e in fe_set_df.columns.tolist()])
     return fe_set_df
 
 
-def fe_set_df_detected(corrected_set_df): 
-    detected_aggregations = {
-        'mjd': [get_max_min_diff, 'skew'],
+def fe_set_df_std_upper_and_lower(corrected_set_df): 
+    object_flux_std_df = corrected_set_df[['object_id', 'flux']].\
+        groupby('object_id').\
+        std().\
+        rename(columns={'flux': 'flux_std'})
+    object_flux_mean_df = corrected_set_df[['object_id', 'flux']].\
+        groupby('object_id').\
+        mean().\
+        rename(columns={'flux': 'flux_mean'})
+    corrected_set_df = corrected_set_df.merge(
+            object_flux_std_df, on='object_id', how='left')
+    corrected_set_df = corrected_set_df.merge(
+            object_flux_mean_df, on='object_id', how='left')
+
+    std_upper_corrected_set_df = corrected_set_df[corrected_set_df.flux > 
+                                    corrected_set_df.flux_std + corrected_set_df.flux_mean]
+    std_lower_corrected_set_df = corrected_set_df[corrected_set_df.flux < 
+                                    corrected_set_df.flux_std + corrected_set_df.flux_mean]
+
+    std_upper_aggregations = {
+        'mjd': [get_max_min_diff, 'var', 'skew', ],
+#        'flux_err': ['min', 'max', 'mean', 'median', 'std', 'var', 'skew', kurtosis],
+        'flux': ['count', 'min'],
+        # 'mjd': ['min', 'max', 'var', ],
     }
-    fe_set_df = corrected_set_df.groupby('object_id').agg({**detected_aggregations})
-    fe_set_df.columns = pd.Index( [e[0] + "_" + e[1] for e in fe_set_df.columns.tolist()])
+    std_lower_aggregations = {
+        'mjd': [get_max_min_diff, 'var', 'skew', ],
+        'flux': ['count', 'max'],
+    }
+
+    std_upper_fe_set_df = std_upper_corrected_set_df.groupby('object_id').agg({**std_upper_aggregations})
+    std_upper_fe_set_df.columns = pd.Index(['std_upper_' + e[0] + "_" + e[1] for e in std_upper_fe_set_df.columns.tolist()])
+    std_lower_fe_set_df = std_lower_corrected_set_df.groupby('object_id').agg({**std_lower_aggregations})
+    std_lower_fe_set_df.columns = pd.Index(['std_lower_' + e[0] + "_" + e[1] for e in std_lower_fe_set_df.columns.tolist()])
+
+    fe_set_df = std_upper_fe_set_df.merge(std_lower_fe_set_df, on='object_id', how='left')
+
     return fe_set_df
 
+
+def fe_set_df_passband(corrected_set_df):
+    passband_aggregations = {
+        # 'mjd': [diff_mean, diff_max],
+        # 'phase': [diff_mean, diff_max],
+        'flux': ['min', 'max', 'count', 'var', 'mean', 'skew', kurtosis, quantile10,quantile25, quantile75, quantile90, quantile2575_range, quantile1090_range, get_max_min_diff],
+        'normed_flux': [diff_mean, ],
+        #'flux_err': ['min', 'max', 'mean', 'median', 'std', 'var', 'skew', kurtosis],
+#        'flux_err': ['var'],
+        'detected': ['mean', ],
+        'flux_ratio_sq': ['sum', 'skew', ],
+        'flux_by_flux_ratio_sq': ['sum', 'skew'],
+    }
+
+    fe_set_df = pd.DataFrame()
+    passbands = [0, 1, 2, 3, 4, 5]
+    for passband in passbands:
+        _passband_set_df = corrected_set_df[corrected_set_df.passband == passband]
+
+        # starter kit type fe
+        starter_fe_series = _passband_set_df.\
+            groupby('object_id').\
+            apply(get_starter_features)
+        starter_fe_df = starter_fe_series.\
+            apply(lambda x: pd.Series(x)).\
+            rename(columns={
+                0: 'band-{}_wmean'.format(passband),
+                1: 'band-{}_normed_std'.format(passband),
+                2: 'band-{}_normed_amp'.format(passband),
+                3: 'band-{}_normed_mad'.format(passband),
+                4: 'band-{}_beyond_1std'.format(passband),
+            })
+
+        # the other aggregations
+        band_fe_set_df = _passband_set_df.\
+            groupby('object_id').\
+            agg({**passband_aggregations})
+        band_fe_set_df.columns = pd.Index(
+            ['band-{}_'.format(passband) + e[0] + "_" + e[1]
+             for e in band_fe_set_df.columns.tolist()])
+
+        if fe_set_df.shape[0] != 0:
+            fe_set_df = fe_set_df.merge(
+                starter_fe_df, on='object_id', how='left')
+        else:
+            fe_set_df = starter_fe_df
+        fe_set_df = fe_set_df.merge(
+            band_fe_set_df, on='object_id', how='left')
+
+    return fe_set_df
+
+
+def fe_set_df_passband_std_upper(corrected_set_df):
+    band_std_upper_flux_aggregations = {
+        'mjd': [get_max_min_diff, 'var', 'skew', diff_mean],
+        'flux': ['count', diff_mean, ],
+    }
+
+    fe_set_df = pd.DataFrame()
+    passbands = [0, 1, 2, 3, 4, 5]
+    for passband in passbands:
+        _passband_set_df = corrected_set_df[corrected_set_df.passband == passband]
+
+        band_object_flux_std_df = _passband_set_df[['object_id', 'flux']].\
+            groupby('object_id').\
+            std().\
+            rename(columns={'flux': 'flux_std'})
+        band_object_flux_mean_df = _passband_set_df[['object_id', 'flux']].\
+            groupby('object_id').\
+            mean().\
+            rename(columns={'flux': 'flux_mean'})
+        _passband_set_df = _passband_set_df.merge(
+            band_object_flux_std_df, on='object_id', how='left')
+        _passband_set_df = _passband_set_df.merge(
+            band_object_flux_mean_df, on='object_id', how='left')
+        band_std_upper_flux_df = _passband_set_df[_passband_set_df.flux >
+                                                _passband_set_df.flux_std + 
+                                                _passband_set_df.flux_mean]
+        band_fe_std_upper_flux_df = band_std_upper_flux_df.groupby('object_id').\
+            agg({**band_std_upper_flux_aggregations})
+        band_fe_std_upper_flux_df.columns = pd.Index(
+            ['band-{}_std_upper_'.format(passband) + e[0] + "_" + e[1]
+                for e in band_fe_std_upper_flux_df.columns.tolist()])
+
+        if fe_set_df.shape[0] != 0:
+            fe_set_df = fe_set_df.merge(
+                band_fe_std_upper_flux_df,  on='object_id', how='left')
+        else:
+            fe_set_df = band_fe_std_upper_flux_df
+
+    return fe_set_df
+
+
+def fe_set_df_passband_detected(corrected_set_df):
+    band_detected_aggregations = {
+        'mjd': [get_max_min_diff, 'var', 'skew', diff_mean],
+    }
+
+    fe_set_df = pd.DataFrame()
+    passbands = [0, 1, 2, 3, 4, 5]
+    for passband in passbands:
+        _passband_set_df = corrected_set_df[corrected_set_df.passband == passband]
+
+        band_detected_df = _passband_set_df[_passband_set_df.detected == 1]
+        band_fe_detected_df = band_detected_df.groupby('object_id').\
+            agg({**band_detected_aggregations})
+        band_fe_detected_df.columns = pd.Index(
+            ['band-{}_detected_'.format(passband) + e[0] + "_" + e[1]
+                for e in band_fe_detected_df.columns.tolist()])
+
+        if fe_set_df.shape[0] != 0:
+            fe_set_df = fe_set_df.merge(
+                band_fe_detected_df,  on='object_id', how='left')
+        else:
+            fe_set_df = band_fe_detected_df
+
+    return fe_set_df
 
 
 class featureCreatorSet(featureCreator):
@@ -299,7 +450,6 @@ class featureCreatorSet(featureCreator):
 #        return fe_set_df
 
     def _create_features(self):
-        self._log_print('creating base features ...')
         set_df_name = [f'test_set_{i}_df' for i in range(62)]
         set_dfs = [self.src_df_dict[f] for f in set_df_name]
         with Pool(self.nthread) as p:
@@ -316,3 +466,247 @@ class featureCreatorSet(featureCreator):
         # set the result in df_dict
         set_res_df.reset_index(inplace=True)
         self.df_dict[self.set_res_df_name] = set_res_df
+
+
+def fe_meta(meta_df):
+    # band feature engineerings 
+    passbands = [0, 1, 2, 3, 4, 5]
+    for passband in passbands:
+        meta_df[f'band-{passband}_flux_count_ratio'] = \
+            meta_df[f'band-{passband}_flux_count'] / meta_df['flux_count']
+
+        # starter type fe
+        lpb = passband
+        rpb = (lpb + 1) % 6
+        lMean = meta_df['band-{}_wmean'.format(lpb)]
+        rMean = meta_df['band-{}_wmean'.format(rpb)]
+        lstd = meta_df['band-{}_normed_std'.format(lpb)]
+        rstd = meta_df['band-{}_normed_std'.format(rpb)]
+        lamp = meta_df['band-{}_normed_amp'.format(lpb)]
+        ramp = meta_df['band-{}_normed_amp'.format(rpb)]
+        # lmad = meta_df['band-{}_normed_mad'.format(lpb)]
+        # rmad = meta_df['band-{}_normed_mad'.format(rpb)]
+        # l1std = meta_df['band-{}_beyond_1std'.format(lpb)]
+        # r1std = meta_df['band-{}_beyond_1std'.format(rpb)]
+        mean_diff = -2.5 * np.log10(lMean / rMean)
+        std_diff = lstd - rstd
+        amp_diff = lamp - ramp
+        # mad_diff = lmad-rmad
+        # beyond_diff = l1std-r1std
+        mean_diff_colname = '{}_minus_{}_wmean'.format(lpb, rpb)
+        std_diff_colname = '{}_minus_{}_std'.format(lpb, rpb)
+        amp_diff_colname = '{}_minus_{}_amp'.format(lpb, rpb)
+        # mad_diff_colname = '{}_minus_{}_mad'.format(lpb, rpb)
+        # beyond_diff_colname = '{}_minus_{}_beyond'.format(lpb, rpb)
+        meta_df[mean_diff_colname] = mean_diff
+        meta_df[std_diff_colname] = std_diff
+        meta_df[amp_diff_colname] = amp_diff
+
+    # non band feature engineering
+    meta_df['flux_diff'] = meta_df['flux_max'] - meta_df['flux_min']
+    meta_df['flux_dif2'] = (meta_df['flux_max'] - meta_df['flux_min'])\
+        / meta_df['flux_mean']
+    meta_df['flux_w_mean'] = meta_df['flux_by_flux_ratio_sq_sum'] / \
+        meta_df['flux_ratio_sq_sum']
+    meta_df['flux_dif3'] = (meta_df['flux_max'] - meta_df['flux_min'])\
+        / meta_df['flux_w_mean']
+    meta_df['corrected_flux_diff'] = meta_df['corrected_flux_max'] - meta_df['corrected_flux_min']
+    meta_df['corrected_flux_dif2'] = (meta_df['corrected_flux_max'] - meta_df['corrected_flux_min'])\
+        / meta_df['corrected_flux_mean']
+    meta_df['corrected_flux_w_mean'] = meta_df['corrected_flux_by_flux_ratio_sq_sum'] / \
+        meta_df['corrected_flux_ratio_sq_sum']
+    meta_df['corrected_flux_dif3'] = (meta_df['corrected_flux_max'] - meta_df['corrected_flux_min'])\
+        / meta_df['corrected_flux_w_mean']
+    meta_df['std_upper_rat'] = meta_df['std_upper_flux_count'] / meta_df['flux_count']
+
+    passband_flux_maxes = \
+        ['band-{}_flux_max'.format(i) for i in passbands]
+    # meta_df['passband_flux_maxes_var'] = \
+    #     meta_df[passband_flux_maxes].var(axis=1)
+    for passband_flux_max in passband_flux_maxes:
+        meta_df[passband_flux_max + '_ratio_to_the_max'] = \
+            meta_df[passband_flux_max] / meta_df['flux_max']
+#    passband_maxes = meta_df[passband_flux_maxes].values
+#    passband_maxes_argmaxes = np.argmax(passband_maxes, axis=1)
+#    meta_df['passband_maxes_argmaxes'] = passband_maxes_argmaxes
+#        meta_df[passband_flux_max + '_from_the_max'] = \
+#             meta_df['flux_max'] - meta_df[passband_flux_max]
+#    passband_flux_maxes_from_the_max = \
+#        ['band-{}_flux_max_from_the_max'.format(i) for i in passbands]
+#    passband_flux_maxes_from_the_max_value = meta_df[passband_flux_maxes_from_the_max].values
+#    passband_flux_maxes_from_the_max_value.sort(axis=1)
+#    meta_df['2nd_passband_flux_max_diff'] = passband_flux_maxes_from_the_max_value[:,1]
+#    meta_df['3rd_passband_flux_max_diff'] = passband_flux_maxes_from_the_max_value[:,2]
+#    meta_df['2nd_passband_flux_max_diff_rat'] = meta_df['2nd_passband_flux_max_diff'] / meta_df.flux_max
+#    meta_df['3rd_passband_flux_max_diff_rat'] = meta_df['3rd_passband_flux_max_diff'] / meta_df.flux_max
+    passband_flux_mins = \
+        ['band-{}_flux_min'.format(i) for i in passbands]
+    meta_df['passband_flux_min_var'] = \
+        meta_df[passband_flux_mins].var(axis=1)
+    # for passband_flux_min in passband_flux_mins:
+    #     meta_df[passband_flux_min + '_ratio_to_the_min'] = \
+    #          meta_df[passband_flux_min] / meta_df['flux_min']
+    passband_flux_means = \
+        ['band-{}_flux_mean'.format(i) for i in passbands]
+    meta_df['passband_flux_means_var'] = \
+        meta_df[passband_flux_means].var(axis=1)
+    passband_flux_counts = \
+        ['band-{}_flux_count_ratio'.format(i) for i in passbands]
+    meta_df['passband_flux_counts_var'] = \
+        meta_df[passband_flux_counts].var(axis=1)
+    passband_detected_means = \
+        ['band-{}_detected_mean'.format(i) for i in passbands]
+    meta_df['passband_detected_means_var'] = \
+        meta_df[passband_detected_means].var(axis=1)
+    # passband_flux_ratio_sq_sum = \
+    #    ['band-{}_flux_ratio_sq_sum'.format(i) for i in passbands]
+    # meta_df['passband_flux_ratio_sq_sum_var'] = \
+    #    meta_df[passband_flux_ratio_sq_sum].var(axis=1)
+    # passband_flux_ratio_sq_skew = \
+    #    ['band-{}_flux_ratio_sq_skew'.format(i) for i in passbands]
+    # meta_df['passband_flux_ratio_sq_skew_var'] = \
+    #    meta_df[passband_flux_ratio_sq_skew].var(axis=1)
+    # band $B$N7gB;N($N(B var $B$H$+$bNI$5$=$&(B
+    passband_flux_vars = \
+        ['band-{}_flux_var'.format(i) for i in passbands]
+    passband_flux_diffs = \
+        ['band-{}_flux_get_max_min_diff'.format(i) for i in passbands]
+    meta_df['band_flux_diff_max'] = meta_df[passband_flux_diffs].max(axis=1)
+    meta_df['band_flux_diff_min'] = meta_df[passband_flux_diffs].min(axis=1)
+    meta_df['band_flux_diff_diff'] = meta_df['band_flux_diff_max'] - meta_df['band_flux_diff_min']
+    meta_df['band_flux_diff_diff_rat'] = meta_df['band_flux_diff_diff'] / meta_df['band_flux_diff_max']
+    meta_df['band_flux_max_min_rat'] = meta_df['band_flux_diff_min'] / meta_df['band_flux_diff_max']
+    meta_df['internal'] = meta_df.hostgal_photoz == 0.
+    meta_df['lumi_dist'] = 10**((meta_df.distmod+5)/5)
+
+    return meta_df
+
+
+class featureCreatorMeta(featureCreator):
+    def __init__(self, fe_set_df, set_res_df_name, load_dir, save_dir, 
+            src_df_dict=None, logger=None, nthread=1, train=True):
+        super(featureCreatorMeta, self).\
+                __init__(load_dir=load_dir,
+                        save_dir=save_dir,
+                        src_df_dict=src_df_dict,
+                        logger=logger,
+                        nthread=nthread)
+        self.fe_set_df = fe_set_df
+        self.set_res_df_name = set_res_df_name
+        self.train = train
+        if self.train:
+            self.meta_file = '/home/naoya.taguchi/.kaggle/competitions/PLAsTiCC-2018/training_set_metadata.csv'
+        else:
+            self.meta_file = '/home/naoya.taguchi/.kaggle/competitions/PLAsTiCC-2018/test_set_metadata.csv'
+
+    def _load(self):
+        path_dict = {
+                'meta_features': self.meta_file,
+                'set_base_features': self.save_dir + 'set_base_features.ftr',
+                'set_passband_std_upper_features': self.save_dir + 'set_passband_std_upper_features.ftr',
+                'set_passband_detected_features': self.save_dir + 'set_passband_detected_features.ftr',
+                'set_detected_features': self.save_dir + 'set_detected_features.ftr',
+                'set_std_upper_and_lower_features': self.save_dir + 'set_std_upper_and_lower_features.ftr',
+                'set_passband_features': self.save_dir + 'set_passband_features.ftr',
+                'set_tsfresh_features': self.save_dir + 'set_tsfresh_features.ftr',
+        }
+        self._load_dfs_from_paths(path_dict=path_dict)
+
+        self.src_df_dict['merged_meta_df'] = self.src_df_dict['meta_features']
+        self._log_print('merging meta dfs ...')
+        for key in tqdm(self.src_df_dict.keys()):
+            print(key)
+            if key == 'meta_features' or key == 'merged_meta_df':
+                continue
+            self.src_df_dict['merged_meta_df'] = self.src_df_dict['merged_meta_df'].\
+                    merge(self.src_df_dict[key], on='object_id', how='left')
+
+    def _create_features(self):
+        object_ids = self.src_df_dict['merged_meta_df'].object_id.unique()
+        meta_dfs = [self.src_df_dict['merged_meta_df'][
+            self.src_df_dict['merged_meta_df'].object_id.isin(obj_id_grp)]
+            for obj_id_grp in np.array_split(object_ids, 62)]
+        print(self.src_df_dict['merged_meta_df'].columns.tolist())
+        with Pool(self.nthread) as p:
+            self._log_print('start fature engineering ...')
+            set_res_list = p.map(self.fe_set_df, meta_dfs)
+            p.close()
+            p.join()
+            set_res_df = pd.concat(set_res_list, axis=0)
+            gc.collect()
+
+        # set the result in df_dict
+        set_res_df.reset_index(inplace=True, drop=True)
+        self.df_dict[self.set_res_df_name] = set_res_df
+
+
+
+class featureCreatorTsfresh(featureCreator):
+    def __init__(self, load_dir, save_dir, src_df_dict=None, logger=None, nthread=1, train=True):
+        super(featureCreatorTsfresh, self).\
+                __init__(load_dir=load_dir,
+                        save_dir=save_dir,
+                        src_df_dict=src_df_dict,
+                        logger=logger,
+                        nthread=nthread)
+        self.train = train
+
+    def _load(self):
+        if self.train:
+            path_dict = {
+                    'set_df': self.load_dir + 'training_set.csv'}
+        else:
+            path_dict = {'set_df': self.load_dir + 'test_set.fth'}
+        self._load_dfs_from_paths(path_dict=path_dict)
+
+    def _get_tsfresh_feats(self, set_df, nthread):
+        # tsfresh features
+        fcp = {
+            'flux': {
+                'longest_strike_above_mean': None,
+                'longest_strike_below_mean': None,
+                'mean_change': None,
+                'mean_abs_change': None,
+                'length': None,
+    #            'number_peaks': [{'n': 1}],
+    #            'fft_coefficient': [
+    #                    {'coeff': 0, 'attr': 'abs'}, 
+    #                    {'coeff': 1, 'attr': 'abs'}
+    #                ],
+    #            'binned_entropy': [{'max_bin': 20}],
+    #            'agg_linear_trend': None,
+    #            'number_cwt_peaks': None,
+            },
+                    
+            'flux_by_flux_ratio_sq': {
+                'longest_strike_above_mean': None,
+                'longest_strike_below_mean': None,       
+            },
+                    
+            'mjd': {
+                'maximum': None, 
+                'minimum': None,
+                'mean_change': None,
+                'mean_abs_change': None,
+            },
+        }
+
+        # ts_flesh features
+        fe_set_df = extract_features(
+                set_df, 
+                column_id='object_id', 
+                column_sort='mjd', 
+                column_kind='passband', 
+                column_value = 'flux', 
+                default_fc_parameters = fcp['flux'], 
+                n_jobs=nthread)
+
+        return fe_set_df
+
+    def _create_features(self):
+        set_res_df = self._get_tsfresh_feats(self.src_df_dict['set_df'], self.nthread).\
+                reset_index().\
+                rename(columns={'id': 'object_id'})
+        # set the result in df_dict
+        set_res_df.reset_index(inplace=True, drop=True)
+        self.df_dict['set_tsfresh_features'] = set_res_df

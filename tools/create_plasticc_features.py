@@ -6,7 +6,7 @@ from logging import getLogger
 
 from my_logging import logInit
 from plasticc_features import featureCreatorPreprocess, featureCreatorSet
-from plasticc_features import fe_set_df_base, fe_set_df_detected, fe_set_df_std_upper_and_lower, fe_set_df_passband, fe_set_df_passband_std_upper, featureCreatorTsfresh, featureCreatorMeta, fe_meta, fe_set_df_passband_detected
+from plasticc_features import fe_set_df_base, fe_set_df_detected, fe_set_df_std_upper_and_lower, fe_set_df_passband, fe_set_df_passband_std_upper, featureCreatorTsfresh, featureCreatorMeta, fe_meta, fe_set_df_passband_detected, fe_set_df_peak_around
 
 LOAD_DIR = '/home/naoya.taguchi/.kaggle/competitions/PLAsTiCC-2018/'
 SAVE_DIR_BASE = '../features/'
@@ -76,7 +76,7 @@ def main(args):
             src_df_dict=preprocessed_src_df_dict,
             logger=logger,
             nthread=args.nthread)
-#    base_feat_creator.run().save()
+    base_feat_creator.run().save()
     del base_feat_creator
     gc.collect()
 
@@ -146,8 +146,23 @@ def main(args):
             src_df_dict=preprocessed_src_df_dict,
             logger=logger,
             nthread=args.nthread)
-    passband_detected_feat_creator.run().save()
+#    passband_detected_feat_creator.run().save()
     del passband_detected_feat_creator
+    gc.collect()
+
+    # passband detected aggregation
+    logger.info('creating peak around features ...')
+    peak_around_feat_creator = featureCreatorSet(
+            fe_set_df=fe_set_df_peak_around,
+            set_res_df_name='set_peak_around_features',
+            load_dir=LOAD_DIR,
+            save_dir=SAVE_DIR,
+            src_df_dict=preprocessed_src_df_dict,
+            logger=logger,
+            nthread=args.nthread)
+    peak_around_feat_creator.run().save()
+
+    del peak_around_feat_creator
     gc.collect()
 
     del preprocessed_src_df_dict

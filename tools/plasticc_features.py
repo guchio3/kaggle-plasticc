@@ -161,12 +161,14 @@ class featureCreatorPreprocess(featureCreator):
         set_metadata_df['lumi_dist'] = 10**((set_metadata_df.distmod+5)/5)
         _set_metadata_df = set_metadata_df
         set_df = set_df.merge(
-            _set_metadata_df[['object_id', 'hostgal_photoz', 'lumi_dist']],
+            _set_metadata_df[['object_id', 'hostgal_photoz', 'lumi_dist', 'distmod']],
             on='object_id',
             how='left')
         set_df['corrected_flux'] = set_df.flux / (set_df.hostgal_photoz**2)
         set_df['normed_flux'] = (set_df.flux - set_df.flux.min()) / set_df.flux.max()
         set_df['luminosity'] = 4*np.pi*(set_df.lumi_dist**2)*set_df.flux
+        set_df['magnitude'] = -2.5*np.log10(set_df.flux)
+        set_df['abs_magnitude'] = set_df.magnitude - set_df.distmod
         return set_df
     
     def _create_features(self):
@@ -213,6 +215,8 @@ def fe_set_df_base(corrected_set_df):
         # 'phase': [diff_mean, diff_max],
         'flux': ['min', 'max', 'mean', 'median',
                  'std', 'var', 'skew', 'count', kurtosis],
+        'abs_magnitude': ['min', 'max', 'mean', 'median',
+                 'std', 'var', 'skew', 'count', kurtosis],
         'corrected_flux': ['min', 'max', 'mean', 'median',
                            'std', 'var', 'skew', ],
         'flux_err': ['min', 'max', 'mean', 'median', 'std', 'var', 'skew', kurtosis],
@@ -222,7 +226,8 @@ def fe_set_df_base(corrected_set_df):
         'flux_by_flux_ratio_sq': ['sum', 'skew', ],
         'corrected_flux_ratio_sq': ['sum', 'skew', ],
         'corrected_flux_by_flux_ratio_sq': ['sum', 'skew'],
-        # 'luminosity': ['median', 'var', 'skew', kurtosis],
+        'luminosity': ['min', 'max', 'mean', 'median',
+                 'std', 'var', 'skew', 'count', kurtosis],
         #        'minused_flux': ['min', 'max', 'mean', 'median',
         #                         'std', 'var', 'skew'],
         #        'normed_flux': ['mean', 'median', 'skew'],
@@ -263,7 +268,7 @@ def fe_set_df_std_upper_and_lower(corrected_set_df):
     std_upper_corrected_set_df = corrected_set_df[corrected_set_df.flux > 
                                     corrected_set_df.flux_std + corrected_set_df.flux_mean]
     std_lower_corrected_set_df = corrected_set_df[corrected_set_df.flux < 
-                                    corrected_set_df.flux_std + corrected_set_df.flux_mean]
+                                    corrected_set_df.flux_std - corrected_set_df.flux_mean]
 
     std_upper_aggregations = {
         'mjd': [get_max_min_diff, 'var', 'skew', ],
@@ -297,6 +302,7 @@ def fe_set_df_passband(corrected_set_df):
         'detected': ['mean', ],
         'flux_ratio_sq': ['sum', 'skew', ],
         'flux_by_flux_ratio_sq': ['sum', 'skew'],
+        'luminosity': ['max', kurtosis],
     }
 
     fe_set_df = pd.DataFrame()
@@ -340,7 +346,7 @@ def fe_set_df_passband(corrected_set_df):
 def fe_set_df_passband_std_upper(corrected_set_df):
     band_std_upper_flux_aggregations = {
         'mjd': [get_max_min_diff, 'var', 'skew', diff_mean],
-        'flux': ['count', diff_mean, ],
+        'flux': ['count', diff_mean, quantile10, quantile25, quantile75, quantile90, quantile2575_range, quantile1090_range],
     }
 
     fe_set_df = pd.DataFrame()
@@ -401,6 +407,113 @@ def fe_set_df_passband_detected(corrected_set_df):
         else:
             fe_set_df = band_fe_detected_df
 
+    return fe_set_df
+
+
+def _get_peak_mjd(df):
+    return df[df.flux == df.flux.max()].iloc[0].mjd
+     
+
+def fe_set_df_peak_around(corrected_set_df):
+    date_lwidths = [14, 14, 0, 30, 0, 30, 90, 0, 90]
+    date_rwidths = [14, 0, 14, 30, 30, 0, 90, 90, 0]
+
+    fe_set_df = pd.DataFrame(corrected_set_df.object_id.unique(), columns=['object_id'])
+    for date_lwidth, date_rwidth in zip(date_lwidths, date_rwidths):
+        peak_df = corrected_set_df.\
+                merge(corrected_set_df.groupby('object_id').
+                apply(_get_peak_mjd).
+                reset_index().
+                rename(columns={0: 'peak_mjd'}),
+                on='object_id', how='left')
+        peak_df = peak_df[
+                (peak_df.mjd <= peak_df.peak_mjd + date_rwidth) &
+                (peak_df.mjd >= peak_df.peak_mjd - date_lwidth)]
+    
+        peak_aggregations = {
+            # 'passband': ['mean', 'std', 'var'],
+            # 'mjd': ['max', 'min', 'var'],
+            # 'mjd': [diff_mean, diff_max],
+            # 'phase': [diff_mean, diff_max],
+            'flux': ['min', 'max', 'mean', 'median',
+                     'std', 'var', 'skew', 'count', kurtosis,
+                     diff_var, get_max_min_diff],
+            'abs_magnitude': ['min', 'max', 'mean', 'median',
+                     'std', 'var', 'skew', 'count', kurtosis, 
+                     diff_var, get_max_min_diff],
+            'corrected_flux': ['min', 'max', 'mean', 'median',
+                               'std', 'var', 'skew', 
+                               diff_var, get_max_min_diff],
+            'flux_ratio_to_flux_err': ['min', 'max', ],
+            'detected': ['mean', ],
+            'flux_ratio_sq': ['sum', 'skew', 'mean', kurtosis],
+            'flux_by_flux_ratio_sq': ['sum', 'skew', ],
+            'corrected_flux_ratio_sq': ['sum', 'skew', ],
+            'corrected_flux_by_flux_ratio_sq': ['sum', 'skew'],
+            'luminosity': ['min', 'max', 'mean', 'median',
+                     'std', 'var', 'skew', 'count', kurtosis],
+            #        'minused_flux': ['min', 'max', 'mean', 'median',
+            #                         'std', 'var', 'skew'],
+            #        'normed_flux': ['mean', 'median', 'skew'],
+            # 'diff_flux_by_diff_mjd': ['min', 'max', 'var', ],
+        }
+    
+        _fe_set_df = peak_df.groupby('object_id').agg({**peak_aggregations})
+        _fe_set_df.columns = pd.Index([f'peak-{date_lwidth}-{date_rwidth}_' + e[0] + "_" + e[1] for e in _fe_set_df.columns.tolist()])
+        fe_set_df = fe_set_df.merge(_fe_set_df, on='object_id', how='left')
+    return fe_set_df
+
+
+def fe_set_df_passband_peak_around(corrected_set_df):
+    passbands = [0, 1, 2, 3, 4, 5]
+    date_lwidths = [14, 14, 0, 30, 0, 30, 90, 0, 90]
+    date_rwidths = [14, 0, 14, 30, 30, 0, 90, 90, 0]
+
+    fe_set_df = pd.DataFrame(corrected_set_df.object_id.unique(), columns=['object_id'])
+    for date_lwidth, date_rwidth in zip(date_lwidths, date_rwidths):
+        for passband in passbands:
+            print('a')
+        peak_df = corrected_set_df.\
+                merge(corrected_set_df.groupby('object_id').
+                apply(_get_peak_mjd).
+                reset_index().
+                rename(columns={0: 'peak_mjd'}),
+                on='object_id', how='left')
+        peak_df = peak_df[
+                (peak_df.mjd <= peak_df.peak_mjd + date_rwidth) &
+                (peak_df.mjd >= peak_df.peak_mjd - date_lwidth)]
+    
+        passband_peak_aggregations = {
+            # 'passband': ['mean', 'std', 'var'],
+            # 'mjd': ['max', 'min', 'var'],
+            # 'mjd': [diff_mean, diff_max],
+            # 'phase': [diff_mean, diff_max],
+            'flux': ['min', 'max', 'mean', 'median',
+                     'std', 'var', 'skew', 'count', kurtosis,
+                     diff_var],
+            'abs_magnitude': ['min', 'max', 'mean', 'median',
+                     'std', 'var', 'skew', 'count', kurtosis, 
+                     diff_var],
+            'corrected_flux': ['min', 'max', 'mean', 'median',
+                               'std', 'var', 'skew', 
+                               diff_var],
+            'flux_ratio_to_flux_err': ['min', 'max', ],
+            'detected': ['mean', ],
+            'flux_ratio_sq': ['sum', 'skew', 'mean', kurtosis],
+            'flux_by_flux_ratio_sq': ['sum', 'skew', ],
+            'corrected_flux_ratio_sq': ['sum', 'skew', ],
+            'corrected_flux_by_flux_ratio_sq': ['sum', 'skew'],
+            'luminosity': ['min', 'max', 'mean', 'median',
+                     'std', 'var', 'skew', 'count', kurtosis],
+            #        'minused_flux': ['min', 'max', 'mean', 'median',
+            #                         'std', 'var', 'skew'],
+            #        'normed_flux': ['mean', 'median', 'skew'],
+            # 'diff_flux_by_diff_mjd': ['min', 'max', 'var', ],
+        }
+    
+        _fe_set_df = peak_df.groupby('object_id').agg({**passband_peak_aggregations})
+        _fe_set_df.columns = pd.Index([f'peak-{date_lwidth}-{date_rwidth}_' + e[0] + "_" + e[1] for e in _fe_set_df.columns.tolist()])
+        fe_set_df = fe_set_df.merge(_fe_set_df, on='object_id', how='left')
     return fe_set_df
 
 
@@ -484,23 +597,48 @@ def fe_meta(meta_df):
         rstd = meta_df['band-{}_normed_std'.format(rpb)]
         lamp = meta_df['band-{}_normed_amp'.format(lpb)]
         ramp = meta_df['band-{}_normed_amp'.format(rpb)]
-        # lmad = meta_df['band-{}_normed_mad'.format(lpb)]
-        # rmad = meta_df['band-{}_normed_mad'.format(rpb)]
-        # l1std = meta_df['band-{}_beyond_1std'.format(lpb)]
-        # r1std = meta_df['band-{}_beyond_1std'.format(rpb)]
+        lmad = meta_df['band-{}_normed_mad'.format(lpb)]
+        rmad = meta_df['band-{}_normed_mad'.format(rpb)]
+        l1std = meta_df['band-{}_beyond_1std'.format(lpb)]
+        r1std = meta_df['band-{}_beyond_1std'.format(rpb)]
+        ldmgmmd = meta_df[f'band-{lpb}_detected_mjd_get_max_min_diff']
+        rdmgmmd = meta_df[f'band-{rpb}_detected_mjd_get_max_min_diff']
+        lskew = meta_df[f'band-{lpb}_flux_skew']
+        rskew = meta_df[f'band-{rpb}_flux_skew']
+        lkurt = meta_df[f'band-{lpb}_flux_kurtosis']
+        rkurt = meta_df[f'band-{rpb}_flux_kurtosis']
+        lq2575_rng = meta_df[f'band-{lpb}_flux_quantile2575_range']
+        rq2575_rng = meta_df[f'band-{rpb}_flux_quantile2575_range']
+        lmax = meta_df['band-{}_flux_max'.format(lpb)]
+        rmax = meta_df['band-{}_flux_max'.format(rpb)]
         mean_diff = -2.5 * np.log10(lMean / rMean)
         std_diff = lstd - rstd
         amp_diff = lamp - ramp
-        # mad_diff = lmad-rmad
-        # beyond_diff = l1std-r1std
+        mad_diff = lmad-rmad
+        beyond_diff = l1std-r1std
+        dmgmmd_diff = ldmgmmd - rdmgmmd
+        skew_diff = lskew - rskew
+        kurt_diff = lkurt - rkurt
+        q2575_rng_diff = lq2575_rng - rq2575_rng
+        max_diff = lmax - rmax
         mean_diff_colname = '{}_minus_{}_wmean'.format(lpb, rpb)
         std_diff_colname = '{}_minus_{}_std'.format(lpb, rpb)
         amp_diff_colname = '{}_minus_{}_amp'.format(lpb, rpb)
-        # mad_diff_colname = '{}_minus_{}_mad'.format(lpb, rpb)
-        # beyond_diff_colname = '{}_minus_{}_beyond'.format(lpb, rpb)
+        mad_diff_colname = '{}_minus_{}_mad'.format(lpb, rpb)
+        beyond_diff_colname = '{}_minus_{}_beyond'.format(lpb, rpb)
+        dmgmmd_diff_colname = f'{lpb}_minus_{rpb}_dmgmmd'
+        skew_diff_colname = f'{lpb}_minus_{rpb}_skew'
+        kurt_diff_colname = f'{lpb}_minus_{rpb}_kurt'
+        q2575_rng_diff_colname = f'{lpb}_minus_{rpb}_q2575_rng'
+        max_diff_colname = f'{lpb}_minus_{rpb}_max'
         meta_df[mean_diff_colname] = mean_diff
         meta_df[std_diff_colname] = std_diff
         meta_df[amp_diff_colname] = amp_diff
+        meta_df[dmgmmd_diff_colname] = dmgmmd_diff
+        meta_df[skew_diff_colname] = skew_diff
+        meta_df[kurt_diff_colname] = kurt_diff
+        meta_df[q2575_rng_diff_colname] = q2575_rng_diff
+        meta_df[max_diff_colname] = max_diff
 
     # non band feature engineering
     meta_df['flux_diff'] = meta_df['flux_max'] - meta_df['flux_min']
@@ -579,6 +717,14 @@ def fe_meta(meta_df):
     meta_df['internal'] = meta_df.hostgal_photoz == 0.
     meta_df['lumi_dist'] = 10**((meta_df.distmod+5)/5)
 
+    # peak around features
+    meta_df['peak_kurt_14to30'] = meta_df['peak-14-14_flux_kurtosis'] - meta_df['peak-30-30_flux_kurtosis']
+    meta_df['peak_kurt_14to90'] = meta_df['peak-14-14_flux_kurtosis'] - meta_df['peak-90-90_flux_kurtosis']
+    meta_df['peak_kurt_30to90'] = meta_df['peak-30-30_flux_kurtosis'] - meta_df['peak-90-90_flux_kurtosis']
+    meta_df['peak_skew_14to30'] = meta_df['peak-14-14_flux_skew'] - meta_df['peak-30-30_flux_skew']
+    meta_df['peak_skew_14to90'] = meta_df['peak-14-14_flux_skew'] - meta_df['peak-90-90_flux_skew']
+    meta_df['peak_skew_30to90'] = meta_df['peak-30-30_flux_skew'] - meta_df['peak-90-90_flux_skew']
+
     return meta_df
 
 
@@ -609,6 +755,7 @@ class featureCreatorMeta(featureCreator):
                 'set_std_upper_and_lower_features': self.save_dir + 'set_std_upper_and_lower_features.ftr',
                 'set_passband_features': self.save_dir + 'set_passband_features.ftr',
                 'set_tsfresh_features': self.save_dir + 'set_tsfresh_features.ftr',
+                'set_peak_around_features': self.save_dir + 'set_peak_around_features.ftr',
         }
         self._load_dfs_from_paths(path_dict=path_dict)
 
@@ -626,7 +773,6 @@ class featureCreatorMeta(featureCreator):
         meta_dfs = [self.src_df_dict['merged_meta_df'][
             self.src_df_dict['merged_meta_df'].object_id.isin(obj_id_grp)]
             for obj_id_grp in np.array_split(object_ids, 62)]
-        print(self.src_df_dict['merged_meta_df'].columns.tolist())
         with Pool(self.nthread) as p:
             self._log_print('start fature engineering ...')
             set_res_list = p.map(self.fe_set_df, meta_dfs)
@@ -637,8 +783,8 @@ class featureCreatorMeta(featureCreator):
 
         # set the result in df_dict
         set_res_df.reset_index(inplace=True, drop=True)
+        self._log_print(set_res_df.columns.tolist())
         self.df_dict[self.set_res_df_name] = set_res_df
-
 
 
 class featureCreatorTsfresh(featureCreator):

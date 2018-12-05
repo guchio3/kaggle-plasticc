@@ -169,6 +169,8 @@ class featureCreatorPreprocess(featureCreator):
         set_df['luminosity'] = 4*np.pi*(set_df.lumi_dist**2)*set_df.flux
         set_df['magnitude'] = -2.5*np.log10(set_df.flux)
         set_df['abs_magnitude'] = set_df.magnitude - set_df.distmod
+        del set_df['magnitude']
+        gc.collect()
         return set_df
     
     def _create_features(self):

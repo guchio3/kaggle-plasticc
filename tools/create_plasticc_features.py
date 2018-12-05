@@ -104,7 +104,7 @@ def main(args):
             src_df_dict=preprocessed_src_df_dict,
             logger=logger,
             nthread=args.nthread)
-#    std_upper_and_lower_feat_creator.run().save()
+    std_upper_and_lower_feat_creator.run().save()
     del std_upper_and_lower_feat_creator
     gc.collect()
 
@@ -118,7 +118,7 @@ def main(args):
             src_df_dict=preprocessed_src_df_dict,
             logger=logger,
             nthread=args.nthread)
-#    passband_feat_creator.run().save()
+    passband_feat_creator.run().save()
     del passband_feat_creator
     gc.collect()
 
@@ -132,7 +132,7 @@ def main(args):
             src_df_dict=preprocessed_src_df_dict,
             logger=logger,
             nthread=args.nthread)
-#    passband_std_upper_feat_creator.run().save()
+    passband_std_upper_feat_creator.run().save()
     del passband_std_upper_feat_creator
     gc.collect()
 
@@ -146,7 +146,7 @@ def main(args):
             src_df_dict=preprocessed_src_df_dict,
             logger=logger,
             nthread=args.nthread)
-#    passband_detected_feat_creator.run().save()
+    passband_detected_feat_creator.run().save()
     del passband_detected_feat_creator
     gc.collect()
 

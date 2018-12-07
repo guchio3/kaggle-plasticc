@@ -166,7 +166,7 @@ class featureCreatorPreprocess(featureCreator):
             how='left')
         set_df['corrected_flux'] = set_df.flux / (set_df.hostgal_photoz**2)
         set_df['normed_flux'] = (set_df.flux - set_df.flux.min()) / set_df.flux.max()
-        set_df['luminosity'] = 4*np.pi*(set_df.lumi_dist**2)*set_df.flux
+#        set_df['luminosity'] = 4*np.pi*(set_df.lumi_dist**2)*set_df.flux
         set_df['magnitude'] = -2.5*np.log10(set_df.flux)
         set_df['abs_magnitude'] = set_df.magnitude - set_df.distmod
         del set_df['magnitude']
@@ -224,12 +224,12 @@ def fe_set_df_base(corrected_set_df):
         'flux_err': ['min', 'max', 'mean', 'median', 'std', 'var', 'skew', kurtosis],
         'flux_ratio_to_flux_err': ['min', 'max', ],
         'detected': ['mean', ],
-        'flux_ratio_sq': ['sum', 'skew', 'mean', kurtosis],
+        'flux_ratio_sq': ['sum', 'skew', 'mean', kurtosis, 'max'],
         'flux_by_flux_ratio_sq': ['sum', 'skew', ],
         'corrected_flux_ratio_sq': ['sum', 'skew', ],
         'corrected_flux_by_flux_ratio_sq': ['sum', 'skew'],
-        'luminosity': ['min', 'max', 'mean', 'median',
-                 'std', 'var', 'skew', 'count', kurtosis],
+        # 'luminosity': ['min', 'max', 'mean', 'median',
+        #          'std', 'var', 'skew', 'count', kurtosis],
         #        'minused_flux': ['min', 'max', 'mean', 'median',
         #                         'std', 'var', 'skew'],
         #        'normed_flux': ['mean', 'median', 'skew'],
@@ -302,9 +302,9 @@ def fe_set_df_passband(corrected_set_df):
         #'flux_err': ['min', 'max', 'mean', 'median', 'std', 'var', 'skew', kurtosis],
 #        'flux_err': ['var'],
         'detected': ['mean', ],
-        'flux_ratio_sq': ['sum', 'skew', ],
+        'flux_ratio_sq': ['sum', 'skew', 'max', 'min', get_max_min_diff],
         'flux_by_flux_ratio_sq': ['sum', 'skew'],
-        'luminosity': ['max', kurtosis],
+#        'luminosity': ['max', kurtosis],
     }
 
     fe_set_df = pd.DataFrame()
@@ -448,12 +448,12 @@ def fe_set_df_peak_around(corrected_set_df):
                                diff_var, get_max_min_diff],
             'flux_ratio_to_flux_err': ['min', 'max', ],
             'detected': ['mean', ],
-            'flux_ratio_sq': ['sum', 'skew', 'mean', kurtosis],
+            'flux_ratio_sq': ['sum', 'skew', 'mean', kurtosis, ],
             'flux_by_flux_ratio_sq': ['sum', 'skew', ],
             'corrected_flux_ratio_sq': ['sum', 'skew', ],
             'corrected_flux_by_flux_ratio_sq': ['sum', 'skew'],
-            'luminosity': ['min', 'max', 'mean', 'median',
-                     'std', 'var', 'skew', 'count', kurtosis],
+#            'luminosity': ['min', 'max', 'mean', 'median',
+#                     'std', 'var', 'skew', 'count', kurtosis],
             #        'minused_flux': ['min', 'max', 'mean', 'median',
             #                         'std', 'var', 'skew'],
             #        'normed_flux': ['mean', 'median', 'skew'],
@@ -505,8 +505,8 @@ def fe_set_df_passband_peak_around(corrected_set_df):
             'flux_by_flux_ratio_sq': ['sum', 'skew', ],
             'corrected_flux_ratio_sq': ['sum', 'skew', ],
             'corrected_flux_by_flux_ratio_sq': ['sum', 'skew'],
-            'luminosity': ['min', 'max', 'mean', 'median',
-                     'std', 'var', 'skew', 'count', kurtosis],
+#            'luminosity': ['min', 'max', 'mean', 'median',
+#                     'std', 'var', 'skew', 'count', kurtosis],
             #        'minused_flux': ['min', 'max', 'mean', 'median',
             #                         'std', 'var', 'skew'],
             #        'normed_flux': ['mean', 'median', 'skew'],
@@ -515,6 +515,59 @@ def fe_set_df_passband_peak_around(corrected_set_df):
     
         _fe_set_df = peak_df.groupby('object_id').agg({**passband_peak_aggregations})
         _fe_set_df.columns = pd.Index([f'peak-{date_lwidth}-{date_rwidth}_' + e[0] + "_" + e[1] for e in _fe_set_df.columns.tolist()])
+        fe_set_df = fe_set_df.merge(_fe_set_df, on='object_id', how='left')
+    return fe_set_df
+
+
+def _get_ratsq_peak_mjd(df):
+    return df[df.flux_ratio_sq == df.flux_ratio_sq.max()].iloc[0].mjd
+     
+def fe_set_df_ratsq_peak_around(corrected_set_df):
+    date_lwidths = [14, 14, 0, 30, 0, 30, 90, 0, 90]
+    date_rwidths = [14, 0, 14, 30, 30, 0, 90, 90, 0]
+
+    fe_set_df = pd.DataFrame(corrected_set_df.object_id.unique(), columns=['object_id'])
+    for date_lwidth, date_rwidth in zip(date_lwidths, date_rwidths):
+        peak_df = corrected_set_df.\
+                merge(corrected_set_df.groupby('object_id').
+                apply(_get_ratsq_peak_mjd).
+                reset_index().
+                rename(columns={0: 'peak_mjd'}),
+                on='object_id', how='left')
+        peak_df = peak_df[
+                (peak_df.mjd <= peak_df.peak_mjd + date_rwidth) &
+                (peak_df.mjd >= peak_df.peak_mjd - date_lwidth)]
+    
+        peak_aggregations = {
+            # 'passband': ['mean', 'std', 'var'],
+            # 'mjd': ['max', 'min', 'var'],
+            # 'mjd': [diff_mean, diff_max],
+            # 'phase': [diff_mean, diff_max],
+            'flux': ['min', 'max', 'mean', 'median',
+                     'std', 'var', 'skew', 'count', kurtosis,
+                     diff_var, get_max_min_diff],
+            'abs_magnitude': ['min', 'max', 'mean', 'median',
+                     'std', 'var', 'skew', 'count', kurtosis, 
+                     diff_var, get_max_min_diff],
+            'corrected_flux': ['min', 'max', 'mean', 'median',
+                               'std', 'var', 'skew', 
+                               diff_var, get_max_min_diff],
+            'flux_ratio_to_flux_err': ['min', 'max', ],
+            'detected': ['mean', ],
+            'flux_ratio_sq': ['sum', 'skew', 'mean', kurtosis, 'var', get_max_min_diff],
+            'flux_by_flux_ratio_sq': ['sum', 'skew', ],
+            'corrected_flux_ratio_sq': ['sum', 'skew', ],
+            'corrected_flux_by_flux_ratio_sq': ['sum', 'skew'],
+#            'luminosity': ['min', 'max', 'mean', 'median',
+#                     'std', 'var', 'skew', 'count', kurtosis],
+            #        'minused_flux': ['min', 'max', 'mean', 'median',
+            #                         'std', 'var', 'skew'],
+            #        'normed_flux': ['mean', 'median', 'skew'],
+            # 'diff_flux_by_diff_mjd': ['min', 'max', 'var', ],
+        }
+    
+        _fe_set_df = peak_df.groupby('object_id').agg({**peak_aggregations})
+        _fe_set_df.columns = pd.Index([f'ratsq-peak-{date_lwidth}-{date_rwidth}_' + e[0] + "_" + e[1] for e in _fe_set_df.columns.tolist()])
         fe_set_df = fe_set_df.merge(_fe_set_df, on='object_id', how='left')
     return fe_set_df
 
@@ -566,7 +619,8 @@ class featureCreatorSet(featureCreator):
 
     def _create_features(self):
         set_df_name = [f'test_set_{i}_df' for i in range(62)]
-        set_dfs = [self.src_df_dict[f] for f in set_df_name]
+        set_dfs = [self.src_df_dict[f].copy() for f in set_df_name]
+        #set_dfs = [self.src_df_dict[f] for f in set_df_name]
         with Pool(self.nthread) as p:
             self._log_print('start fature engineering ...')
             #set_res_list = p.map(self._fe_set_df_base, set_dfs)
@@ -589,6 +643,10 @@ def fe_meta(meta_df):
     for passband in passbands:
         meta_df[f'band-{passband}_flux_count_ratio'] = \
             meta_df[f'band-{passband}_flux_count'] / meta_df['flux_count']
+        meta_df[f'band-{passband}_std_upper_flux_count_ratio'] = \
+            meta_df[f'band-{passband}_std_upper_flux_count'] / meta_df['flux_count']
+        meta_df[f'band-{passband}_flux_ratio_sq_max_ratio'] = \
+            meta_df[f'band-{passband}_flux_ratio_sq_max'] / meta_df['flux_ratio_sq_max']
 
         # starter type fe
         lpb = passband
@@ -613,6 +671,8 @@ def fe_meta(meta_df):
         rq2575_rng = meta_df[f'band-{rpb}_flux_quantile2575_range']
         lmax = meta_df['band-{}_flux_max'.format(lpb)]
         rmax = meta_df['band-{}_flux_max'.format(rpb)]
+        lratsqmax = meta_df['band-{}_flux_ratio_sq_max'.format(lpb)]
+        rratsqmax = meta_df['band-{}_flux_ratio_sq_max'.format(rpb)]
         mean_diff = -2.5 * np.log10(lMean / rMean)
         std_diff = lstd - rstd
         amp_diff = lamp - ramp
@@ -623,6 +683,8 @@ def fe_meta(meta_df):
         kurt_diff = lkurt - rkurt
         q2575_rng_diff = lq2575_rng - rq2575_rng
         max_diff = lmax - rmax
+        ratsqmax_diff = lratsqmax - rratsqmax
+        ratsqmax_diff_log = -2.5 * np.log10(lratsqmax/rratsqmax)
         mean_diff_colname = '{}_minus_{}_wmean'.format(lpb, rpb)
         std_diff_colname = '{}_minus_{}_std'.format(lpb, rpb)
         amp_diff_colname = '{}_minus_{}_amp'.format(lpb, rpb)
@@ -633,6 +695,8 @@ def fe_meta(meta_df):
         kurt_diff_colname = f'{lpb}_minus_{rpb}_kurt'
         q2575_rng_diff_colname = f'{lpb}_minus_{rpb}_q2575_rng'
         max_diff_colname = f'{lpb}_minus_{rpb}_max'
+        ratsqmax_diff_colname = f'{lpb}_minus_{rpb}_ratsqmax'
+        ratsqmax_diff_log_colname = f'{lpb}_minus_{rpb}_ratsqmax_log'
         meta_df[mean_diff_colname] = mean_diff
         meta_df[std_diff_colname] = std_diff
         meta_df[amp_diff_colname] = amp_diff
@@ -641,6 +705,8 @@ def fe_meta(meta_df):
         meta_df[kurt_diff_colname] = kurt_diff
         meta_df[q2575_rng_diff_colname] = q2575_rng_diff
         meta_df[max_diff_colname] = max_diff
+        meta_df[ratsqmax_diff_colname] = ratsqmax_diff
+        meta_df[ratsqmax_diff_log_colname] = ratsqmax_diff_log
 
     # non band feature engineering
     meta_df['flux_diff'] = meta_df['flux_max'] - meta_df['flux_min']
@@ -758,6 +824,7 @@ class featureCreatorMeta(featureCreator):
                 'set_passband_features': self.save_dir + 'set_passband_features.ftr',
                 'set_tsfresh_features': self.save_dir + 'set_tsfresh_features.ftr',
                 'set_peak_around_features': self.save_dir + 'set_peak_around_features.ftr',
+                'set_ratsq_peak_around_features': self.save_dir + 'set_ratsq_peak_around_features.ftr',
         }
         self._load_dfs_from_paths(path_dict=path_dict)
 

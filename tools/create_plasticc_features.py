@@ -6,7 +6,7 @@ from logging import getLogger
 
 from my_logging import logInit
 from plasticc_features import featureCreatorPreprocess, featureCreatorSet
-from plasticc_features import fe_set_df_base, fe_set_df_detected, fe_set_df_std_upper_and_lower, fe_set_df_passband, fe_set_df_passband_std_upper, featureCreatorTsfresh, featureCreatorMeta, fe_meta, fe_set_df_passband_detected, fe_set_df_peak_around
+from plasticc_features import fe_set_df_base, fe_set_df_detected, fe_set_df_std_upper_and_lower, fe_set_df_passband, fe_set_df_passband_std_upper, featureCreatorTsfresh, featureCreatorMeta, fe_meta, fe_set_df_passband_detected, fe_set_df_peak_around, fe_set_df_ratsq_peak_around
 
 LOAD_DIR = '/home/naoya.taguchi/.kaggle/competitions/PLAsTiCC-2018/'
 SAVE_DIR_BASE = '../features/'
@@ -150,7 +150,22 @@ def main(args):
     del passband_detected_feat_creator
     gc.collect()
 
-    # passband detected aggregation
+    # peak around
+    logger.info('creating ratsq peak around features ...')
+    ratsq_peak_around_feat_creator = featureCreatorSet(
+            fe_set_df=fe_set_df_ratsq_peak_around,
+            set_res_df_name='set_ratsq_peak_around_features',
+            load_dir=LOAD_DIR,
+            save_dir=SAVE_DIR,
+            src_df_dict=preprocessed_src_df_dict,
+            logger=logger,
+            nthread=args.nthread)
+    ratsq_peak_around_feat_creator.run().save()
+
+    del ratsq_peak_around_feat_creator
+    gc.collect()
+
+    # peak around
     logger.info('creating peak around features ...')
     peak_around_feat_creator = featureCreatorSet(
             fe_set_df=fe_set_df_peak_around,

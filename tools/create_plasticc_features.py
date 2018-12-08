@@ -29,10 +29,6 @@ def parse_args():
                         help='number of avalable threads.',
                         type=int,
                         required=True)
-    parser.add_argument('-z', '--specz',
-                        help='flg to use specz',
-                        action='store_true',
-                        default=False)
 
     args = parser.parse_args()
     return args

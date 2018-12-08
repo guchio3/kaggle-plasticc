@@ -168,17 +168,17 @@ class featureCreatorPreprocess(featureCreator):
         # set_metadata_df['z_lumi_dist'] = 10**((set_metadata_df.distmod+5)/5)
         _set_metadata_df = set_metadata_df
         set_df = set_df.merge(
-            _set_metadata_df[['object_id', 'hostgal_photoz', 'z_lumi_dist', 'lumi_dist', 'distmod', 'hostgal_specz']],
+            _set_metadata_df[['object_id', 'hostgal_photoz', 'lumi_dist', 'distmod', 'hostgal_specz']],
             on='object_id',
             how='left')
         set_df['corrected_flux'] = set_df.flux / (set_df.hostgal_photoz**2)
         set_df['z_corrected_flux'] = set_df.flux / (set_df.hostgal_specz**2)
         set_df['normed_flux'] = (set_df.flux - set_df.flux.min()) / set_df.flux.max()
-        set_df['luminosity'] = 4*np.pi*(set_df.lumi_dist**2)*set_df.flux
+#        set_df['luminosity'] = 4*np.pi*(set_df.lumi_dist**2)*set_df.flux
         # set_df['z_luminosity'] = 4*np.pi*(set_df.z_lumi_dist**2)*set_df.flux
-        set_df['magnitude'] = -2.5*np.log10(set_df.flux)
-        set_df['abs_magnitude'] = set_df.magnitude - set_df.distmod
-        del set_df['magnitude'], set_df['distmod'], set_df['hostgal_specz'], set_df['lumi_dist']#, set_df['z_lumi_dist']
+#        set_df['magnitude'] = -2.5*np.log10(set_df.flux)
+#        set_df['abs_magnitude'] = set_df.magnitude - set_df.distmod
+        del set_df['distmod'], set_df['hostgal_specz'], set_df['lumi_dist']#, set_df['z_lumi_dist'], set_df['magnitude']
         gc.collect()
         return set_df
     
@@ -230,8 +230,8 @@ def fe_set_df_base(corrected_set_df):
         # 'phase': [diff_mean, diff_max],
         'flux': ['min', 'max', 'mean', 'median',
                  'std', 'var', 'skew', 'count', kurtosis],
-        'abs_magnitude': ['min', 'max', 'mean', 'median',
-                 'std', 'var', 'skew', 'count', kurtosis],
+#        'abs_magnitude': ['min', 'max', 'mean', 'median',
+#                 'std', 'var', 'skew', 'count', kurtosis],
         'corrected_flux': ['min', 'max', 'mean', 'median',
                            'std', 'var', 'skew', ],
         'z_corrected_flux': ['min', 'max', 'mean', 'median',
@@ -245,8 +245,8 @@ def fe_set_df_base(corrected_set_df):
         'corrected_flux_by_flux_ratio_sq': ['sum', 'skew'],
         'z_corrected_flux_ratio_sq': ['sum', 'skew', ],
         'z_corrected_flux_by_flux_ratio_sq': ['sum', 'skew'],
-        'luminosity': ['min', 'max', 'mean', 'median',
-                 'std', 'var', 'skew', 'count', kurtosis],
+#        'luminosity': ['min', 'max', 'mean', 'median',
+#                 'std', 'var', 'skew', 'count', kurtosis],
 #        'z_luminosity': ['min', 'max', 'mean', 'median',
 #                 'std', 'var', 'skew', 'count', kurtosis],
         #        'minused_flux': ['min', 'max', 'mean', 'median',
@@ -323,7 +323,7 @@ def fe_set_df_passband(corrected_set_df):
         'detected': ['mean', ],
         'flux_ratio_sq': ['sum', 'skew', 'max', 'min', get_max_min_diff],
         'flux_by_flux_ratio_sq': ['sum', 'skew'],
-        'luminosity': ['max', kurtosis],
+#        'luminosity': ['max', kurtosis],
         'corrected_flux': ['min', 'max', 'mean', 'median',
                            'std', 'var', 'skew', 
                             diff_var, get_max_min_diff],
@@ -465,9 +465,9 @@ def fe_set_df_peak_around(corrected_set_df):
             'flux': ['min', 'max', 'mean', 'median',
                      'std', 'var', 'skew', 'count', kurtosis,
                      diff_var, get_max_min_diff],
-            'abs_magnitude': ['min', 'max', 'mean', 'median',
-                     'std', 'var', 'skew', 'count', kurtosis, 
-                     diff_var, get_max_min_diff],
+#            'abs_magnitude': ['min', 'max', 'mean', 'median',
+#                     'std', 'var', 'skew', 'count', kurtosis, 
+#                     diff_var, get_max_min_diff],
             'corrected_flux': ['min', 'max', 'mean', 'median',
                                'std', 'var', 'skew', 
                                diff_var, get_max_min_diff],
@@ -518,9 +518,9 @@ def fe_set_df_passband_peak_around(corrected_set_df):
             'flux': ['min', 'max', 'mean', 'median',
                      'std', 'var', 'skew', 'count', kurtosis,
                      diff_var],
-            'abs_magnitude': ['min', 'max', 'mean', 'median',
-                     'std', 'var', 'skew', 'count', kurtosis, 
-                     diff_var],
+#            'abs_magnitude': ['min', 'max', 'mean', 'median',
+#                     'std', 'var', 'skew', 'count', kurtosis, 
+#                     diff_var],
             'corrected_flux': ['min', 'max', 'mean', 'median',
                                'std', 'var', 'skew', 
                                diff_var],
@@ -575,9 +575,9 @@ def fe_set_df_ratsq_peak_around(corrected_set_df):
             'flux': ['min', 'max', 'mean', 'median',
                      'std', 'var', 'skew', 'count', kurtosis,
                      diff_var, get_max_min_diff],
-            'abs_magnitude': ['min', 'max', 'mean', 'median',
-                     'std', 'var', 'skew', 'count', kurtosis, 
-                     diff_var, get_max_min_diff],
+#            'abs_magnitude': ['min', 'max', 'mean', 'median',
+#                     'std', 'var', 'skew', 'count', kurtosis, 
+#                     diff_var, get_max_min_diff],
             'corrected_flux': ['min', 'max', 'mean', 'median',
                                'std', 'var', 'skew', 
                                diff_var, get_max_min_diff],

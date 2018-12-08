@@ -13,6 +13,8 @@ from tsfresh.feature_extraction import extract_features
 
 from features import featureCreator, MulHelper, toapply
 
+from astropy.cosmology import FlatLambdaCDM
+
 
 warnings.simplefilter('ignore', RuntimeWarning)
 warnings.filterwarnings('ignore')
@@ -158,18 +160,25 @@ class featureCreatorPreprocess(featureCreator):
         # _set_metadata_df = set_metadata_df[
         #         (set_metadata_df.hostgal_photoz_err < 0.5) &
         #         (set_metadata_df.hostgal_photoz_err > 0.)]
+        # cosmo = FlatLambdaCDM(H0=70, Om0=0.3, Tcmb0=2.725)
+        # distance_modulus = cosmo.distmod(set_metadata_df.hostgal_specz)
+        # set_metadata_df['z_distmod'] = distance_modulus
+
         set_metadata_df['lumi_dist'] = 10**((set_metadata_df.distmod+5)/5)
+        # set_metadata_df['z_lumi_dist'] = 10**((set_metadata_df.distmod+5)/5)
         _set_metadata_df = set_metadata_df
         set_df = set_df.merge(
-            _set_metadata_df[['object_id', 'hostgal_photoz', 'lumi_dist', 'distmod']],
+            _set_metadata_df[['object_id', 'hostgal_photoz', 'z_lumi_dist', 'lumi_dist', 'distmod', 'hostgal_specz']],
             on='object_id',
             how='left')
         set_df['corrected_flux'] = set_df.flux / (set_df.hostgal_photoz**2)
+        set_df['z_corrected_flux'] = set_df.flux / (set_df.hostgal_specz**2)
         set_df['normed_flux'] = (set_df.flux - set_df.flux.min()) / set_df.flux.max()
-#        set_df['luminosity'] = 4*np.pi*(set_df.lumi_dist**2)*set_df.flux
+        set_df['luminosity'] = 4*np.pi*(set_df.lumi_dist**2)*set_df.flux
+        # set_df['z_luminosity'] = 4*np.pi*(set_df.z_lumi_dist**2)*set_df.flux
         set_df['magnitude'] = -2.5*np.log10(set_df.flux)
         set_df['abs_magnitude'] = set_df.magnitude - set_df.distmod
-        del set_df['magnitude']
+        del set_df['magnitude'], set_df['distmod'], set_df['hostgal_specz'], set_df['lumi_dist']#, set_df['z_lumi_dist']
         gc.collect()
         return set_df
     
@@ -205,6 +214,10 @@ class featureCreatorPreprocess(featureCreator):
                 _set_df['corrected_flux'] / _set_df['flux_err'], 2.0)
             _set_df['corrected_flux_by_flux_ratio_sq'] = _set_df['corrected_flux'] * \
                 _set_df['flux_ratio_sq']
+            _set_df['z_corrected_flux_ratio_sq'] = np.power(
+                _set_df['z_corrected_flux'] / _set_df['flux_err'], 2.0)
+            _set_df['z_corrected_flux_by_flux_ratio_sq'] = _set_df['z_corrected_flux'] * \
+                _set_df['flux_ratio_sq']
             # replace
             self.src_df_dict[set_df_name] = _set_df
 
@@ -221,6 +234,8 @@ def fe_set_df_base(corrected_set_df):
                  'std', 'var', 'skew', 'count', kurtosis],
         'corrected_flux': ['min', 'max', 'mean', 'median',
                            'std', 'var', 'skew', ],
+        'z_corrected_flux': ['min', 'max', 'mean', 'median',
+                           'std', 'var', 'skew', ],
         'flux_err': ['min', 'max', 'mean', 'median', 'std', 'var', 'skew', kurtosis],
         'flux_ratio_to_flux_err': ['min', 'max', ],
         'detected': ['mean', ],
@@ -228,8 +243,12 @@ def fe_set_df_base(corrected_set_df):
         'flux_by_flux_ratio_sq': ['sum', 'skew', ],
         'corrected_flux_ratio_sq': ['sum', 'skew', ],
         'corrected_flux_by_flux_ratio_sq': ['sum', 'skew'],
-        # 'luminosity': ['min', 'max', 'mean', 'median',
-        #          'std', 'var', 'skew', 'count', kurtosis],
+        'z_corrected_flux_ratio_sq': ['sum', 'skew', ],
+        'z_corrected_flux_by_flux_ratio_sq': ['sum', 'skew'],
+        'luminosity': ['min', 'max', 'mean', 'median',
+                 'std', 'var', 'skew', 'count', kurtosis],
+#        'z_luminosity': ['min', 'max', 'mean', 'median',
+#                 'std', 'var', 'skew', 'count', kurtosis],
         #        'minused_flux': ['min', 'max', 'mean', 'median',
         #                         'std', 'var', 'skew'],
         #        'normed_flux': ['mean', 'median', 'skew'],
@@ -304,7 +323,13 @@ def fe_set_df_passband(corrected_set_df):
         'detected': ['mean', ],
         'flux_ratio_sq': ['sum', 'skew', 'max', 'min', get_max_min_diff],
         'flux_by_flux_ratio_sq': ['sum', 'skew'],
-#        'luminosity': ['max', kurtosis],
+        'luminosity': ['max', kurtosis],
+        'corrected_flux': ['min', 'max', 'mean', 'median',
+                           'std', 'var', 'skew', 
+                            diff_var, get_max_min_diff],
+        'z_corrected_flux': ['min', 'max', 'mean', 'median',
+                           'std', 'var', 'skew', 
+                            diff_var, get_max_min_diff],
     }
 
     fe_set_df = pd.DataFrame()
@@ -499,12 +524,16 @@ def fe_set_df_passband_peak_around(corrected_set_df):
             'corrected_flux': ['min', 'max', 'mean', 'median',
                                'std', 'var', 'skew', 
                                diff_var],
+            'z_corrected_flux': ['min', 'max', 'mean', 'median',
+                               'std', 'var', 'skew', 
+                               diff_var],
             'flux_ratio_to_flux_err': ['min', 'max', ],
             'detected': ['mean', ],
             'flux_ratio_sq': ['sum', 'skew', 'mean', kurtosis],
             'flux_by_flux_ratio_sq': ['sum', 'skew', ],
             'corrected_flux_ratio_sq': ['sum', 'skew', ],
-            'corrected_flux_by_flux_ratio_sq': ['sum', 'skew'],
+            'z_corrected_flux_ratio_sq': ['sum', 'skew', ],
+            'z_corrected_flux_by_flux_ratio_sq': ['sum', 'skew'],
 #            'luminosity': ['min', 'max', 'mean', 'median',
 #                     'std', 'var', 'skew', 'count', kurtosis],
             #        'minused_flux': ['min', 'max', 'mean', 'median',
@@ -673,6 +702,10 @@ def fe_meta(meta_df):
         rmax = meta_df['band-{}_flux_max'.format(rpb)]
         lratsqmax = meta_df['band-{}_flux_ratio_sq_max'.format(lpb)]
         rratsqmax = meta_df['band-{}_flux_ratio_sq_max'.format(rpb)]
+        rcorrmax = meta_df['band-{}_corrected_flux_max'.format(rpb)]
+        lcorrmax = meta_df['band-{}_corrected_flux_max'.format(lpb)]
+        rzcorrmax = meta_df['band-{}_z_corrected_flux_max'.format(rpb)]
+        lzcorrmax = meta_df['band-{}_z_corrected_flux_max'.format(lpb)]
         mean_diff = -2.5 * np.log10(lMean / rMean)
         std_diff = lstd - rstd
         amp_diff = lamp - ramp
@@ -684,6 +717,8 @@ def fe_meta(meta_df):
         q2575_rng_diff = lq2575_rng - rq2575_rng
         max_diff = lmax - rmax
         ratsqmax_diff = lratsqmax - rratsqmax
+        corrmax_diff = lcorrmax - rcorrmax
+        zcorrmax_diff = lzcorrmax - rzcorrmax
         ratsqmax_diff_log = -2.5 * np.log10(lratsqmax/rratsqmax)
         mean_diff_colname = '{}_minus_{}_wmean'.format(lpb, rpb)
         std_diff_colname = '{}_minus_{}_std'.format(lpb, rpb)
@@ -697,6 +732,8 @@ def fe_meta(meta_df):
         max_diff_colname = f'{lpb}_minus_{rpb}_max'
         ratsqmax_diff_colname = f'{lpb}_minus_{rpb}_ratsqmax'
         ratsqmax_diff_log_colname = f'{lpb}_minus_{rpb}_ratsqmax_log'
+        corrmax_diff_colname = f'{lpb}_minus_{rpb}_corrmax_diff'
+        zcorrmax_diff_colname = f'{lpb}_minus_{rpb}_zcorrmax_diff'
         meta_df[mean_diff_colname] = mean_diff
         meta_df[std_diff_colname] = std_diff
         meta_df[amp_diff_colname] = amp_diff
@@ -707,6 +744,8 @@ def fe_meta(meta_df):
         meta_df[max_diff_colname] = max_diff
         meta_df[ratsqmax_diff_colname] = ratsqmax_diff
         meta_df[ratsqmax_diff_log_colname] = ratsqmax_diff_log
+        meta_df[corrmax_diff_colname] = corrmax_diff
+        meta_df[zcorrmax_diff_colname] = zcorrmax_diff
 
     # non band feature engineering
     meta_df['flux_diff'] = meta_df['flux_max'] - meta_df['flux_min']
@@ -723,6 +762,14 @@ def fe_meta(meta_df):
         meta_df['corrected_flux_ratio_sq_sum']
     meta_df['corrected_flux_dif3'] = (meta_df['corrected_flux_max'] - meta_df['corrected_flux_min'])\
         / meta_df['corrected_flux_w_mean']
+    meta_df['z_corrected_flux_diff'] = meta_df['z_corrected_flux_max'] - meta_df['z_corrected_flux_min']
+    meta_df['z_corrected_flux_dif2'] = (meta_df['z_corrected_flux_max'] - meta_df['z_corrected_flux_min'])\
+        / meta_df['z_corrected_flux_mean']
+    meta_df['z_corrected_flux_w_mean'] = meta_df['z_corrected_flux_by_flux_ratio_sq_sum'] / \
+        meta_df['z_corrected_flux_ratio_sq_sum']
+    meta_df['z_corrected_flux_dif3'] = (meta_df['z_corrected_flux_max'] - meta_df['z_corrected_flux_min'])\
+        / meta_df['z_corrected_flux_w_mean']
+
     meta_df['std_upper_rat'] = meta_df['std_upper_flux_count'] / meta_df['flux_count']
 
     passband_flux_maxes = \

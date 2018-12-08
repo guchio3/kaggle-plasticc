@@ -36,5 +36,27 @@ def get_fold_resampling_dict(y_sample, logger,
 #            fold_resampling_dict[target] = \
 #                int(max(fold_resampling_dict[target], sampling_lower))
 #                int(fold_resampling_dict[target] * sampling_lower_rate)
+#    fold_resampling_dict = {
+#            0: 121,
+#            1: 396,
+#            2: 740,
+#            3: 955,
+#            4: 147,
+#            5: 60,
+#            6: 388,
+#            7: 82,
+#            8: 85,
+#            9: 167,
+#            10: 296,
+#            11: 1851,
+#            12: 192,
+#            13: 140}
+#    change_dict = {166: 500, 146: 500}
+#    for key in fold_resampling_dict:
+#        if fold_resampling_dict[key] in change_dict:
+#            print(fold_resampling_dict[key])
+#            fold_resampling_dict[key] = change_dict[fold_resampling_dict[key]]
+#    fold_resampling_dict[4] = 300
+#    fold_resampling_dict[9] = 300
     logger.info('resampled fold_samples_num : {}'.format(fold_resampling_dict))
     return fold_resampling_dict

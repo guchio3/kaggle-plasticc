@@ -29,6 +29,10 @@ def parse_args():
                         help='number of avalable threads.',
                         type=int,
                         required=True)
+    parser.add_argument('-z', '--specz',
+                        help='flg to use specz',
+                        action='store_true',
+                        default=False)
 
     args = parser.parse_args()
     return args
@@ -90,7 +94,7 @@ def main(args):
             src_df_dict=preprocessed_src_df_dict,
             logger=logger,
             nthread=args.nthread)
-#    detected_feat_creator.run().save()
+    detected_feat_creator.run().save()
     del detected_feat_creator
     gc.collect()
 
@@ -160,7 +164,7 @@ def main(args):
             src_df_dict=preprocessed_src_df_dict,
             logger=logger,
             nthread=args.nthread)
-    ratsq_peak_around_feat_creator.run().save()
+#    ratsq_peak_around_feat_creator.run().save()
 
     del ratsq_peak_around_feat_creator
     gc.collect()
@@ -175,7 +179,7 @@ def main(args):
             src_df_dict=preprocessed_src_df_dict,
             logger=logger,
             nthread=args.nthread)
-    peak_around_feat_creator.run().save()
+#    peak_around_feat_creator.run().save()
 
     del peak_around_feat_creator
     gc.collect()

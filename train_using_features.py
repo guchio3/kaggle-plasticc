@@ -1002,7 +1002,11 @@ if __name__ == '__main__':
     #        'band-5_flux_ratio_sq_max_ratio',
     #        'flux_ratio_sq_max',
     #        'ddf'
-            
+            'my_skew',
+            'my_kurt',
+            'mjd_diff_af_det1',
+#            'mjd_diff_bf_det1',
+            'mjd_diff_ab_sum'
     ]
 
 

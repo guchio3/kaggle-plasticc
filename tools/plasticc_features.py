@@ -115,6 +115,22 @@ def quantile2575_range(x):
 def quantile1090_range(x):
     return quantile90(x) - quantile10(x)
 
+def calc_flux_mjd_skewness(df):
+    mjd = df.mjd
+    flux = df.flux.clip(0., None)
+    mean = (df.mjd * flux).sum() / flux.sum()
+    std = np.abs(np.sqrt(((mjd - mean)**2 * flux).sum() / flux.sum()))
+    fm_skew = ((((mjd - mean) * flux).sum())/flux.sum())**3 / std**3
+    return fm_skew
+
+def calc_flux_mjd_kurtosis(df):
+    mjd = df.mjd
+    flux = df.flux.clip(0., None)
+    mean = (df.mjd * flux).sum() / flux.sum()
+    std = np.abs(np.sqrt(((mjd - mean)**2 * flux).sum() / flux.sum()))
+    fm_kurt = ((((mjd - mean) * flux).sum())/flux.sum())**4 / std**4
+    return fm_kurt
+
 
 # =======================================
 # feature creator
@@ -601,6 +617,36 @@ def fe_set_df_ratsq_peak_around(corrected_set_df):
     return fe_set_df
 
 
+def fe_set_df_my_skew_kurt(corrected_set_df):
+    skew_df = corrected_set_df.groupby('object_id').\
+            apply(calc_flux_mjd_skewness).\
+            rename('my_skew')
+    skew_df = (skew_df * 1e40).reset_index()
+    kurt_df = corrected_set_df.groupby('object_id').\
+            apply(calc_flux_mjd_kurtosis).\
+            rename('my_kurt')
+    kurt_df = (kurt_df * 1e55).reset_index()
+    fe_set_df = skew_df.merge(kurt_df, on='object_id', how='left')
+    return fe_set_df
+
+
+def fe_set_df_deficits(corrected_set_df):
+    det_mjd_diff = corrected_set_df[corrected_set_df['detected']==1].pivot_table('mjd','object_id',aggfunc=[min,max])
+    det_mjd_diff.columns = ['min_mjd', 'max_mjd']
+    # detected==1の前後の間隔を追加
+    mjd_diff_ = corrected_set_df[['object_id','mjd']].merge(right=det_mjd_diff, on=['object_id'], how='left')
+    max_mjd_bf_det1 = mjd_diff_[mjd_diff_.mjd < mjd_diff_.min_mjd].groupby('object_id')[['object_id','mjd', 'min_mjd']].max().rename(columns={'mjd': 'max_mjd_bf_det1'})
+    mjd_diff_bf_det1 = max_mjd_bf_det1['min_mjd'] - max_mjd_bf_det1['max_mjd_bf_det1']
+    mjd_diff_bf_det1 = mjd_diff_bf_det1.rename('mjd_diff_bf_det1').reset_index()
+    min_mjd_af_det1 = mjd_diff_[mjd_diff_.mjd > mjd_diff_.max_mjd].groupby('object_id')[['object_id','mjd', 'max_mjd']].min().rename(columns={'mjd': 'min_mjd_af_det1'})
+    mjd_diff_af_det1 = min_mjd_af_det1['min_mjd_af_det1'] - min_mjd_af_det1['max_mjd'] 
+    mjd_diff_af_det1 = mjd_diff_af_det1.rename('mjd_diff_af_det1').reset_index()
+
+    fe_set_df = mjd_diff_bf_det1.merge(mjd_diff_af_det1, on ='object_id', how='left')
+    fe_set_df['mjd_diff_ab_sum'] = fe_set_df['mjd_diff_af_det1'] + fe_set_df['mjd_diff_bf_det1']
+    return fe_set_df.set_index('object_id')
+
+
 class featureCreatorSet(featureCreator):
     def __init__(self, fe_set_df, set_res_df_name, load_dir, save_dir, 
             src_df_dict=None, logger=None, nthread=1):
@@ -872,6 +918,8 @@ class featureCreatorMeta(featureCreator):
                 'set_tsfresh_features': self.save_dir + 'set_tsfresh_features.ftr',
                 'set_peak_around_features': self.save_dir + 'set_peak_around_features.ftr',
                 'set_ratsq_peak_around_features': self.save_dir + 'set_ratsq_peak_around_features.ftr',
+                'set_skkt_features': self.save_dir + 'set_skkt_features.ftr',
+                'set_deficits_features': self.save_dir + 'set_deficits_features.ftr',
         }
         self._load_dfs_from_paths(path_dict=path_dict)
 

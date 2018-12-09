@@ -6,7 +6,7 @@ from logging import getLogger
 
 from my_logging import logInit
 from plasticc_features import featureCreatorPreprocess, featureCreatorSet
-from plasticc_features import fe_set_df_base, fe_set_df_detected, fe_set_df_std_upper_and_lower, fe_set_df_passband, fe_set_df_passband_std_upper, featureCreatorTsfresh, featureCreatorMeta, fe_meta, fe_set_df_passband_detected, fe_set_df_peak_around, fe_set_df_ratsq_peak_around
+from plasticc_features import fe_set_df_base, fe_set_df_detected, fe_set_df_std_upper_and_lower, fe_set_df_passband, fe_set_df_passband_std_upper, featureCreatorTsfresh, featureCreatorMeta, fe_meta, fe_set_df_passband_detected, fe_set_df_peak_around, fe_set_df_ratsq_peak_around, fe_set_df_my_skew_kurt, fe_set_df_deficits
 
 LOAD_DIR = '/home/naoya.taguchi/.kaggle/competitions/PLAsTiCC-2018/'
 SAVE_DIR_BASE = '../features/'
@@ -76,7 +76,7 @@ def main(args):
             src_df_dict=preprocessed_src_df_dict,
             logger=logger,
             nthread=args.nthread)
-    base_feat_creator.run().save()
+#    base_feat_creator.run().save()
     del base_feat_creator
     gc.collect()
 
@@ -90,7 +90,7 @@ def main(args):
             src_df_dict=preprocessed_src_df_dict,
             logger=logger,
             nthread=args.nthread)
-    detected_feat_creator.run().save()
+#    detected_feat_creator.run().save()
     del detected_feat_creator
     gc.collect()
 
@@ -104,7 +104,7 @@ def main(args):
             src_df_dict=preprocessed_src_df_dict,
             logger=logger,
             nthread=args.nthread)
-    std_upper_and_lower_feat_creator.run().save()
+#    std_upper_and_lower_feat_creator.run().save()
     del std_upper_and_lower_feat_creator
     gc.collect()
 
@@ -118,7 +118,7 @@ def main(args):
             src_df_dict=preprocessed_src_df_dict,
             logger=logger,
             nthread=args.nthread)
-    passband_feat_creator.run().save()
+#    passband_feat_creator.run().save()
     del passband_feat_creator
     gc.collect()
 
@@ -132,7 +132,7 @@ def main(args):
             src_df_dict=preprocessed_src_df_dict,
             logger=logger,
             nthread=args.nthread)
-    passband_std_upper_feat_creator.run().save()
+#    passband_std_upper_feat_creator.run().save()
     del passband_std_upper_feat_creator
     gc.collect()
 
@@ -146,7 +146,7 @@ def main(args):
             src_df_dict=preprocessed_src_df_dict,
             logger=logger,
             nthread=args.nthread)
-    passband_detected_feat_creator.run().save()
+#    passband_detected_feat_creator.run().save()
     del passband_detected_feat_creator
     gc.collect()
 
@@ -179,6 +179,37 @@ def main(args):
 
     del peak_around_feat_creator
     gc.collect()
+
+    # my_skew, my_kurt
+    logger.info('creating my skkt features ...')
+    my_skkt_feat_creator = featureCreatorSet(
+            fe_set_df=fe_set_df_my_skew_kurt,
+            set_res_df_name='set_skkt_features',
+            load_dir=LOAD_DIR,
+            save_dir=SAVE_DIR,
+            src_df_dict=preprocessed_src_df_dict,
+            logger=logger,
+            nthread=args.nthread)
+    my_skkt_feat_creator.run().save()
+
+    del my_skkt_feat_creator
+    gc.collect()
+
+    # my_skew, my_kurt
+    logger.info('creating my skkt features ...')
+    deficits_feat_creator = featureCreatorSet(
+            fe_set_df=fe_set_df_deficits,
+            set_res_df_name='set_deficits_features',
+            load_dir=LOAD_DIR,
+            save_dir=SAVE_DIR,
+            src_df_dict=preprocessed_src_df_dict,
+            logger=logger,
+            nthread=args.nthread)
+    deficits_feat_creator.run().save()
+
+    del deficits_feat_creator
+    gc.collect()
+
 
     del preprocessed_src_df_dict
     gc.collect()

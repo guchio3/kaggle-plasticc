@@ -331,8 +331,10 @@ def main(args, features):
             team_scores.append(team_score)
             zeropad_scores.append(zeropad_score)
             val_pred_score_zeropads.append(pd.concat([pd.DataFrame(val_pred_score_zeropad), pd.Series(y_val)], axis=1))
-            conf_y_true.append(np.argmax(val_pred_score, axis=1))
-            conf_y_pred.append(y_val)
+            conf_y_true.append(y_val)
+            conf_y_pred.append(np.argmax(val_pred_score, axis=1))
+            # conf_y_true.append(np.argmax(val_pred_score, axis=1))
+            # conf_y_pred.append(y_val)
             i += 1
 
         mean_best_score = np.mean(best_scores)
@@ -445,7 +447,8 @@ def main(args, features):
             test_df = pd.read_feather('./features/test/meta_features.ftr', nthreads=args.nthread)
 
             with open('./lcfit/LCfit_feature_test_v1_20181203.pkl', 'rb') as fin:
-                test_df = test_df.merge(pickle.load(fin), on='object_id', how='left')
+                test_df = test_df[list(set(test_df.columns.tolist()) & set(FEATURES_TO_USE)) + ['object_id']].\
+                        merge(pickle.load(fin), on='object_id', how='left')
 
             object_ids = test_df.object_id
 
@@ -538,7 +541,7 @@ if __name__ == '__main__':
     FEATURES_TO_USE = [
     #        'hostgal_photoz',
             'hostgal_photoz_err',
-            'distmod',
+#            'distmod',
             'lumi_dist',
             'flux_min',
             'flux_max',
@@ -937,14 +940,14 @@ if __name__ == '__main__':
     #####        'peak_kurt_14to30',
     #        'peak_kurt_14to90',
     #####        'peak_kurt_30to90',
-    #####        'peak-14-14_flux_skew',
+            'peak-14-14_flux_skew',
     #        'peak-30-30_flux_skew',
     #        'peak-90-90_flux_skew',
     #####        'peak_skew_14to30',
     #        'peak_skew_14to90',
     #        'peak_skew_30to90',
-    #####        'peak-0-14_flux_diff_var',
-    #####        'peak-0-30_flux_diff_var',
+            'peak-0-14_flux_diff_var',
+            'peak-0-30_flux_diff_var',
     #####        'peak-0-90_flux_diff_var',
     #        'peak-14-0_flux_diff_var',
     #        'peak-30-0_flux_diff_var',
@@ -1006,7 +1009,22 @@ if __name__ == '__main__':
             'my_kurt',
             'mjd_diff_af_det1',
 #            'mjd_diff_bf_det1',
-            'mjd_diff_ab_sum'
+            'mjd_diff_ab_sum',
+#            'band-0_my_skew',
+#            'band-1_my_skew',
+#            'band-2_my_skew',
+#            'band-3_my_skew',
+#            'band-4_my_skew',
+#            'band-5_my_skew',
+#            'band-0_my_kurt',
+#            'band-1_my_kurt',
+#            'band-2_my_kurt',
+#            'band-3_my_kurt',
+#            'band-4_my_kurt',
+#            'band-5_my_kurt',
+#            'hostgal_photoz',
+#            'det_my_skew',
+#            'det_my_kurt',
     ]
 
 

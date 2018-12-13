@@ -60,3 +60,20 @@ def get_fold_resampling_dict(y_sample, logger,
 #    fold_resampling_dict[9] = 300
     logger.info('resampled fold_samples_num : {}'.format(fold_resampling_dict))
     return fold_resampling_dict
+
+
+def haradasan_get_fold_resampling_dict(y_sample, logger,
+                             sampling_lower, sampling_lower_rate):
+    fold_resampling_dict = {}
+    targets = [i for i in range(14)]
+    for target in targets:
+        fold_resampling_dict[target] = y_sample[y_sample == target].shape[0]
+    logger.info('fold_samples_num : {}'.format(fold_resampling_dict))
+
+    fold_max_num = max(list(fold_resampling_dict.values()))
+
+    for target in fold_resampling_dict.keys():
+        fold_resampling_dict[target] = fold_max_num
+
+    logger.info('resampled fold_samples_num : {}'.format(fold_resampling_dict))
+    return fold_resampling_dict

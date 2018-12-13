@@ -137,6 +137,7 @@ def wloss_metric(preds, train_data):
 def wloss_objective(preds, train_data):
     classes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
     class_weight = {6: 1, 15: 2, 16: 1, 42: 1, 52: 1, 53: 1, 62: 1, 64: 2, 65: 1, 67: 1, 88: 1, 90: 1, 92: 1, 95: 1}
+    #class_weight = {6: 1, 15: 2, 16: 1, 42: 1, 52: 2, 53: 1, 62: 1, 64: 2, 65: 1, 67: 2, 88: 1, 90: 1, 92: 1, 95: 1}
     weight_tensor = torch.tensor(list(class_weight.values()),
                              requires_grad=False).type(torch.FloatTensor)
     class_dict = {c: i for i, c in enumerate(classes)}

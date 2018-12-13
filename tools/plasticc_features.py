@@ -461,10 +461,13 @@ def fe_set_df_peak_around(corrected_set_df):
     date_lwidths = [14, 14, 0, 30, 0, 30, 90, 0, 90]
     date_rwidths = [14, 0, 14, 30, 30, 0, 90, 90, 0]
 
-    fe_set_df = pd.DataFrame(corrected_set_df.object_id.unique(), columns=['object_id'])
+    # detected しないと overfit する
+    det_corrected_set_df = corrected_set_df.query('detected == 1')
+
+    fe_set_df = pd.DataFrame(det_corrected_set_df.object_id.unique(), columns=['object_id'])
     for date_lwidth, date_rwidth in zip(date_lwidths, date_rwidths):
-        peak_df = corrected_set_df.\
-                merge(corrected_set_df.groupby('object_id').
+        peak_df = det_corrected_set_df.\
+                merge(det_corrected_set_df.groupby('object_id').
                 apply(_get_peak_mjd).
                 reset_index().
                 rename(columns={0: 'peak_mjd'}),
@@ -627,6 +630,33 @@ def fe_set_df_my_skew_kurt(corrected_set_df):
             rename('my_kurt')
     kurt_df = (kurt_df * 1e55).reset_index()
     fe_set_df = skew_df.merge(kurt_df, on='object_id', how='left')
+
+    # detected type
+    det_skew_df = corrected_set_df.query('detected==1').groupby('object_id').\
+            apply(calc_flux_mjd_skewness).\
+            rename('det_my_skew')
+    det_skew_df = (det_skew_df * 1e40).reset_index()
+    det_kurt_df = corrected_set_df.query('detected==1').groupby('object_id').\
+            apply(calc_flux_mjd_kurtosis).\
+            rename('det_my_kurt')
+    det_kurt_df = (det_kurt_df * 1e55).reset_index()
+    fe_set_df = fe_set_df.merge(det_skew_df, on='object_id', how='left')
+    fe_set_df = fe_set_df.merge(det_kurt_df, on='object_id', how='left')
+
+    for passband in range(6):
+        band_df = corrected_set_df[corrected_set_df.passband == passband]
+        band_skew_df = band_df.\
+            groupby('object_id').\
+            apply(calc_flux_mjd_skewness).\
+            rename(f'band-{passband}_my_skew')
+        band_skew_df = (band_skew_df * 1e40).reset_index()
+        band_kurt_df = band_df.\
+            groupby('object_id').\
+            apply(calc_flux_mjd_kurtosis).\
+            rename(f'band-{passband}_my_kurt')
+        band_kurt_df = (band_kurt_df * 1e55).reset_index()
+        fe_set_df = fe_set_df.merge(band_skew_df, on='object_id', how='left')
+        fe_set_df = fe_set_df.merge(band_kurt_df, on='object_id', how='left')
     return fe_set_df
 
 

@@ -1,0 +1,12 @@
+[I 12:46:01.097 NotebookApp] JupyterLab beta preview extension loaded from /home/naoya.taguchi/anaconda3/lib/python3.6/site-packages/jupyterlab
+[I 12:46:01.098 NotebookApp] JupyterLab application directory is /home/naoya.taguchi/anaconda3/share/jupyter/lab
+[I 12:46:01.102 NotebookApp] Serving notebooks from local directory: /home/naoya.taguchi/workspace/kaggle/plasticc-2018_after_pack/notebook
+[I 12:46:01.102 NotebookApp] 0 active kernels
+[I 12:46:01.102 NotebookApp] The Jupyter Notebook is running at:
+[I 12:46:01.102 NotebookApp] http://0.0.0.0:8000/
+[I 12:46:01.102 NotebookApp] Use Control-C to stop this server and shut down all kernels (twice to skip confirmation).
+[I 12:47:27.414 NotebookApp] 302 GET / (27.131.11.254) 0.80ms
+[I 12:47:27.585 NotebookApp] 302 GET /tree? (27.131.11.254) 1.19ms
+[I 12:54:32.062 NotebookApp] 302 POST /login?next=%2Ftree%3F (27.131.11.254) 1.26ms
+[C 12:54:55.985 NotebookApp] received signal 15, stopping
+[I 12:54:55.987 NotebookApp] Shutting down 0 kernels

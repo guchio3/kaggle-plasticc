@@ -175,7 +175,7 @@ def main(args):
             src_df_dict=preprocessed_src_df_dict,
             logger=logger,
             nthread=args.nthread)
-    peak_around_feat_creator.run().save()
+#    peak_around_feat_creator.run().save()
 
     del peak_around_feat_creator
     gc.collect()
@@ -190,7 +190,7 @@ def main(args):
             src_df_dict=preprocessed_src_df_dict,
             logger=logger,
             nthread=args.nthread)
-    my_skkt_feat_creator.run().save()
+    #my_skkt_feat_creator.run().save()
 
     del my_skkt_feat_creator
     gc.collect()

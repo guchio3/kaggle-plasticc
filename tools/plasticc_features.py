@@ -962,6 +962,27 @@ class featureCreatorMeta(featureCreator):
             self.src_df_dict['merged_meta_df'] = self.src_df_dict['merged_meta_df'].\
                     merge(self.src_df_dict[key], on='object_id', how='left')
 
+        if self.train:
+            okumura_df1 = pd.read_pickle('../lcfit/LCfit_feature_train_v4_20181205.pkl.gz', compression='gzip')
+            self.src_df_dict['merged_meta_df'] = self.src_df_dict['merged_meta_df'].\
+                    merge(okumura_df1, on='object_id', how='left')
+            del okumura_df1
+            okumura_df2 = pd.read_pickle('../lcfit/okumurasan_feats/LCfit_feature_allSN_i_train_v2_20181213.pkl.gz', compression='gzip')
+            self.src_df_dict['merged_meta_df'] = self.src_df_dict['merged_meta_df'].\
+                    merge(okumura_df2, on='object_id', how='left')
+            del okumura_df2
+            gc.collect()
+        else:
+            okumura_df1 = pd.read_pickle('../lcfit/LCfit_feature_test_v4_20181205.pkl.gz', compression='gzip')
+            self.src_df_dict['merged_meta_df'] = self.src_df_dict['merged_meta_df'].\
+                    merge(okumura_df1, on='object_id', how='left')
+            del okumura_df1
+            okumura_df2 = pd.read_pickle('../lcfit/okumurasan_feats/LCfit_feature_allSN_i_test_v2_20181213.pkl.gz', compression='gzip')
+            self.src_df_dict['merged_meta_df'] = self.src_df_dict['merged_meta_df'].\
+                    merge(okumura_df2, on='object_id', how='left')
+            del okumura_df2
+            gc.collect()
+
     def _create_features(self):
         object_ids = self.src_df_dict['merged_meta_df'].object_id.unique()
         meta_dfs = [self.src_df_dict['merged_meta_df'][

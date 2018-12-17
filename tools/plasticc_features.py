@@ -961,13 +961,29 @@ class featureCreatorMeta(featureCreator):
                 continue
             self.src_df_dict['merged_meta_df'] = self.src_df_dict['merged_meta_df'].\
                     merge(self.src_df_dict[key], on='object_id', how='left')
+#            del self.src_df_dict[key]
+            gc.collect()
 
         if self.train:
             okumura_df1 = pd.read_pickle('../lcfit/LCfit_feature_train_v4_20181205.pkl.gz', compression='gzip')
             self.src_df_dict['merged_meta_df'] = self.src_df_dict['merged_meta_df'].\
                     merge(okumura_df1, on='object_id', how='left')
             del okumura_df1
-            okumura_df2 = pd.read_pickle('../lcfit/okumurasan_feats/LCfit_feature_allSN_i_train_v2_20181213.pkl.gz', compression='gzip')
+            gc.collect()
+            #okumura_df2 = pd.read_pickle('../lcfit/train_v2_20181213.pkl.gz', compression='gzip')
+            #self.src_df_dict['merged_meta_df'] = self.src_df_dict['merged_meta_df'].\
+            #        merge(okumura_df2, on='object_id', how='left')
+            #del okumura_df2
+            #gc.collect()
+            okumura_df2 = pd.read_pickle('../lcfit/the_last_train_okumurasan_feats.pkl.gz', compression='gzip')
+            okumura_df2['dmax_g_std'] = okumura_df2[['c42_g_z0_dmax', 'c42_g_z1_dmax', 'c42_g_z2_dmax', 'c42_g_z3_dmax']].std(axis=1)
+            okumura_df2['dmax_i_std'] = okumura_df2[['c42_i_z0_dmax', 'c42_i_z1_dmax', 'c42_i_z2_dmax', 'c42_i_z3_dmax']].std(axis=1)
+            okumura_df2['dmax_z_std'] = okumura_df2[['c42_z_z0_dmax', 'c42_z_z1_dmax', 'c42_z_z2_dmax', 'c42_z_z3_dmax']].std(axis=1)
+            okumura_df2['dmax_r_std'] = okumura_df2[['c42_r_z0_dmax', 'c42_r_z1_dmax', 'c42_r_z2_dmax', 'c42_r_z3_dmax']].std(axis=1)
+            okumura_df2['dmax_g_mean'] = okumura_df2[['c42_g_z0_dmax', 'c42_g_z1_dmax', 'c42_g_z2_dmax', 'c42_g_z3_dmax']].mean(axis=1)
+            okumura_df2['dmax_i_mean'] = okumura_df2[['c42_i_z0_dmax', 'c42_i_z1_dmax', 'c42_i_z2_dmax', 'c42_i_z3_dmax']].mean(axis=1)
+            okumura_df2['dmax_z_mean'] = okumura_df2[['c42_z_z0_dmax', 'c42_z_z1_dmax', 'c42_z_z2_dmax', 'c42_z_z3_dmax']].mean(axis=1)
+            okumura_df2['dmax_r_mean'] = okumura_df2[['c42_r_z0_dmax', 'c42_r_z1_dmax', 'c42_r_z2_dmax', 'c42_r_z3_dmax']].mean(axis=1)
             self.src_df_dict['merged_meta_df'] = self.src_df_dict['merged_meta_df'].\
                     merge(okumura_df2, on='object_id', how='left')
             del okumura_df2
@@ -977,7 +993,20 @@ class featureCreatorMeta(featureCreator):
             self.src_df_dict['merged_meta_df'] = self.src_df_dict['merged_meta_df'].\
                     merge(okumura_df1, on='object_id', how='left')
             del okumura_df1
-            okumura_df2 = pd.read_pickle('../lcfit/okumurasan_feats/LCfit_feature_allSN_i_test_v2_20181213.pkl.gz', compression='gzip')
+            #okumura_df2 = pd.read_pickle('../lcfit/test_v2_20181213.pkl.gz', compression='gzip')
+            #self.src_df_dict['merged_meta_df'] = self.src_df_dict['merged_meta_df'].\
+            #        merge(okumura_df2, on='object_id', how='left')
+            #del okumura_df2
+            #gc.collect()
+            okumura_df2 = pd.read_pickle('../lcfit/the_last_test_okumurasan_feats.pkl.gz', compression='gzip')
+            okumura_df2['dmax_g_std'] = okumura_df2[['c42_g_z0_dmax', 'c42_g_z1_dmax', 'c42_g_z2_dmax', 'c42_g_z3_dmax']].std(axis=1)
+            okumura_df2['dmax_i_std'] = okumura_df2[['c42_i_z0_dmax', 'c42_i_z1_dmax', 'c42_i_z2_dmax', 'c42_i_z3_dmax']].std(axis=1)
+            okumura_df2['dmax_z_std'] = okumura_df2[['c42_z_z0_dmax', 'c42_z_z1_dmax', 'c42_z_z2_dmax', 'c42_z_z3_dmax']].std(axis=1)
+            okumura_df2['dmax_r_std'] = okumura_df2[['c42_r_z0_dmax', 'c42_r_z1_dmax', 'c42_r_z2_dmax', 'c42_r_z3_dmax']].std(axis=1)
+            okumura_df2['dmax_g_mean'] = okumura_df2[['c42_g_z0_dmax', 'c42_g_z1_dmax', 'c42_g_z2_dmax', 'c42_g_z3_dmax']].mean(axis=1)
+            okumura_df2['dmax_i_mean'] = okumura_df2[['c42_i_z0_dmax', 'c42_i_z1_dmax', 'c42_i_z2_dmax', 'c42_i_z3_dmax']].mean(axis=1)
+            okumura_df2['dmax_z_mean'] = okumura_df2[['c42_z_z0_dmax', 'c42_z_z1_dmax', 'c42_z_z2_dmax', 'c42_z_z3_dmax']].mean(axis=1)
+            okumura_df2['dmax_r_mean'] = okumura_df2[['c42_r_z0_dmax', 'c42_r_z1_dmax', 'c42_r_z2_dmax', 'c42_r_z3_dmax']].mean(axis=1)
             self.src_df_dict['merged_meta_df'] = self.src_df_dict['merged_meta_df'].\
                     merge(okumura_df2, on='object_id', how='left')
             del okumura_df2

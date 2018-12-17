@@ -187,6 +187,9 @@ def plt_confusion_matrics():
 
 def main(args, features):
     FEATURES_TO_USE = features
+    imp_df = pd.read_csv('./importances/Booster_weight-multi-logloss-0.495417_2018-12-14-18-47-29_importance.csv')
+    #FEATURES_TO_USE = [feat for feat in FEATURES_TO_USE if feat in set(imp_df.head(180).feature)] + ['object_id']
+    FEATURES_TO_USE = [feat for feat in FEATURES_TO_USE if feat in set(imp_df.sort_values('importance_mean', axis=0, ascending=False).head(180).feature)] + ['object_id']
     logger = getLogger(__name__)
     logInit(logger, log_dir='./log/', log_filename='train.log')
     logger.info(
@@ -339,7 +342,7 @@ def main(args, features):
             ros = RandomOverSampler(
                 ratio=fold_resampling_dict,
                 random_state=71)
-            x_trn, y_trn = ros.fit_sample(x_trn, y_trn)
+#            x_trn, y_trn = ros.fit_sample(x_trn, y_trn)
 
             train_dataset = lightgbm.Dataset(x_trn, y_trn)
             valid_dataset = lightgbm.Dataset(x_val, y_val)
@@ -463,7 +466,7 @@ def main(args, features):
             ros = RandomOverSampler(
                 ratio=fold_resampling_dict,
                 random_state=71)
-            x_train, y_train = ros.fit_sample(x_train, y_train)
+#            x_train, y_train = ros.fit_sample(x_train, y_train)
 
             train_dataset = lightgbm.Dataset(x_train, y_train)
             lin_booster = lightgbm.train(
@@ -511,6 +514,8 @@ def main(args, features):
 #            del okumura_test_df
 #            gc.collect()
 
+            test_df['dmax_std'] = test_df[['c42_i_z0_dmax', 'c42_i_z1_dmax', 'c42_i_z2_dmax', 'c42_i_z3_dmax']].std(axis=1)
+            test_df['dmax_mean'] = test_df[['c42_i_z0_dmax', 'c42_i_z1_dmax', 'c42_i_z2_dmax', 'c42_i_z3_dmax']].mean(axis=1)
             test_df = test_df[FEATURES_TO_USE]
 
 #            okumura_test_df2 = pd.read_pickle(

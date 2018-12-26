@@ -18,7 +18,7 @@ import seaborn as sns
 
 from tools.my_logging import logInit
 from tools.feature_tools import feature_engineering
-from tools.objective_function import weighted_multi_logloss, lgb_multi_weighted_logloss, wloss_objective, wloss_metric, softmax, calc_team_score, wloss_metric_for_zeropad
+from tools.objective_function import weighted_multi_logloss, lgb_multi_weighted_logloss, wloss_objective, wloss_metric, softmax, calc_team_score, wloss_metric_for_zeropad, wloss_objective_gumbel, wloss_metric_gumbel
 from tools.model_io import save_models, load_models
 from tools.fold_resampling import get_fold_resampling_dict
 
@@ -79,7 +79,7 @@ def get_params(args):
         #        'learning_rate': 0.02,
         #        'num_leaves': 32,
         'max_depth': 3,
-        'subsample': .9,
+        'subsample': .8,
         'colsample_bytree': .7,
         'reg_alpha': .01,
         'reg_lambda': .01,
@@ -95,7 +95,7 @@ def get_params(args):
         'max_bin': 20,
 #        'min_data_in_leaf': 300,
 #        'bagging_fraction': 0.1, 
-#        'bagging_freq': 10, 
+        'bagging_freq': 1, 
     }
     return PARAMS
 
@@ -148,6 +148,7 @@ def plt_confusion_matrics():
 
 def main(args, features):
     FEATURES_TO_USE = features
+    #FEATURES_TO_USE = pd.read_csv('./importances/Booster_weight-multi-logloss-0.521646_2018-12-17-13-29-29_importance.csv').sort_values('importance_mean', ascending=False).head(150).feature.tolist()# + ['object_id']
     FEATURES_TO_USE = pd.read_csv('./importances/Booster_weight-multi-logloss-0.528846_2018-12-17-06-30-21_importance.csv').sort_values('importance_mean', ascending=False).head(220).feature.tolist()# + ['object_id']
 #####    FEATURES_TO_USE = pd.read_csv('./importances/Booster_weight-multi-logloss-0.534367_2018-12-15-18-49-06_importance.csv').sort_values('importance_mean', ascending=False).head(165).feature.tolist()# + ['object_id']
 #    FEATURES_TO_USE = pd.read_csv('./importances/Booster_weight-multi-logloss-0.534367_2018-12-15-18-49-06_importance.csv').head(165).feature.tolist()# + ['object_id']
@@ -296,9 +297,11 @@ def main(args, features):
             valid_dataset = lightgbm.Dataset(x_val, y_val)
             booster = lightgbm.train(
                 PARAMS.copy(), train_dataset,
-                num_boost_round=2000,
+                num_boost_round=20000,
                 fobj=wloss_objective,
+                #fobj=wloss_objective_gumbel,
                 feval=wloss_metric,
+                #feval=wloss_metric_gumbel,
                 valid_sets=[train_dataset, valid_dataset],
                 verbose_eval=100,
                 early_stopping_rounds=100,

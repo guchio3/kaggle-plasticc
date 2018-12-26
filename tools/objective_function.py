@@ -5,6 +5,7 @@ from sklearn import preprocessing
 import torch
 import torch.nn.functional as F
 from torch.autograd import grad
+from torch.autograd import Variable
 
 
 # これを更新する必要はありそう
@@ -207,3 +208,75 @@ def wloss_metric_for_zeropad(preds, train_data, gal_cols, ext_gal_cols, gal_rows
     wll = torch.sum(y_h * ln_p, dim=0)
     loss = -torch.dot(weight_tensor, wll) / torch.sum(weight_tensor)
     return loss.numpy() * 1.
+
+
+def _sample_gumbel(shape, eps=1e-10, out=None):
+    """
+    Sample from Gumbel(0, 1)
+    based on
+    https://github.com/ericjang/gumbel-softmax/blob/3c8584924603869e90ca74ac20a6a03d99a91ef9/Categorical%20VAE.ipynb ,
+    (MIT license)
+    """
+    U = out.resize_(shape).uniform_() if out is not None else torch.rand(shape)
+    return - torch.log(eps - torch.log(U + eps))
+
+def _gumbel_softmax_sample(logits, tau=0.1, eps=1e-10):
+    """
+    Draw a sample from the Gumbel-Softmax distribution
+    based on
+    https://github.com/ericjang/gumbel-softmax/blob/3c8584924603869e90ca74ac20a6a03d99a91ef9/Categorical%20VAE.ipynb
+    (MIT license)
+    """
+    dims = logits.dim()
+    gumbel_noise = Variable(_sample_gumbel(logits.size(), eps=eps, out=logits.data.new()))
+    y = logits + gumbel_noise
+    return F.softmax(y / tau, dims - 1)
+
+
+def wloss_objective_gumbel(preds, train_data):
+    classes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+    class_weight = {6: 1, 15: 2, 16: 1, 42: 1, 52: 1, 53: 1, 62: 1, 64: 2, 65: 1, 67: 1, 88: 1, 90: 1, 92: 1, 95: 1}
+    #class_weight = {6: 1, 15: 2, 16: 1, 42: 1, 52: 2, 53: 1, 62: 1, 64: 2, 65: 1, 67: 2, 88: 1, 90: 1, 92: 1, 95: 1}
+    weight_tensor = torch.tensor(list(class_weight.values()),
+                             requires_grad=False).type(torch.FloatTensor)
+    class_dict = {c: i for i, c in enumerate(classes)}
+    y_t = torch.tensor(train_data.get_label(), requires_grad=False).type(torch.LongTensor)
+    y_h = torch.zeros(
+        y_t.shape[0], len(classes), requires_grad=False).scatter(1, y_t.reshape(-1, 1), 1)
+    ys = y_h.sum(dim=0, keepdim=True)
+    y_h /= ys
+    y_p = torch.tensor(preds, requires_grad=True).type(torch.FloatTensor)
+    y_r = y_p.reshape(len(classes), -1).transpose(0, 1)
+    y_r = torch.clamp(y_r, e-15, 1-e-15)
+    ln_p = _gumbel_softmax_sample(torch.log(y_r))
+#    ln_p = torch.log_softmax(y_r, dim=1)
+    wll = torch.sum(y_h * ln_p, dim=0)
+    loss = -torch.dot(weight_tensor, wll)
+    grads = grad(loss, y_p, create_graph=True)[0]
+    grads *= float(len(classes)) / torch.sum(1 / ys)  # scale up grads
+    hess = torch.ones(y_p.shape)  # haven't bothered with properly doing hessian yet
+    return grads.detach().numpy(), \
+        hess.detach().numpy()
+
+
+def wloss_metric_gumbel(preds, train_data):
+    classes = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+    class_weight = {6: 1, 15: 2, 16: 1, 42: 1, 52: 1, 53: 1, 62: 1, 64: 2, 65: 1, 67: 1, 88: 1, 90: 1, 92: 1, 95: 1}
+    weight_tensor = torch.tensor(list(class_weight.values()),
+                             requires_grad=False).type(torch.FloatTensor)
+    y_t = torch.tensor(train_data.get_label(), requires_grad=False).type(torch.LongTensor)
+    y_h = torch.zeros(
+        y_t.shape[0], len(classes), requires_grad=False).scatter(1, y_t.reshape(-1, 1), 1)
+    y_h /= y_h.sum(dim=0, keepdim=True)
+    y_p = torch.tensor(preds, requires_grad=False).type(torch.FloatTensor)
+    if len(y_p.shape) == 1:
+        y_p = y_p.reshape(len(classes), -1).transpose(0, 1)
+    #ln_p = torch.log_softmax(y_p, dim=1)
+    y_p = torch.clamp(y_p, e-15, 1-e-15)
+    ln_p = _gumbel_softmax_sample(torch.log(y_p))
+    wll = torch.sum(y_h * ln_p, dim=0)
+    loss = -torch.dot(weight_tensor, wll) / torch.sum(weight_tensor)
+    return 'wloss', loss.numpy() * 1., False
+
+
+

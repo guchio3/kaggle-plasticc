@@ -151,11 +151,13 @@ class featureCreatorPreprocess(featureCreator):
             path_dict = {
                     'set_df': self.load_dir + 'training_set.csv',
                     'set_metadata_df': self.load_dir + 'training_set_metadata.csv'}
+            self.src_df_dict['set_df'] = pd.read_hdf('/home/naoya.taguchi/.kaggle/competitions/PLAsTiCC-2018/kyle_final_augment.h5', 'df')
+            self.src_df_dict['set_metadata_df'] = pd.read_hdf('/home/naoya.taguchi/.kaggle/competitions/PLAsTiCC-2018/kyle_final_augment.h5', 'meta')
         else:
             path_dict = {'set_metadata_df': self.load_dir + 'test_set_metadata.csv'}
             for i in tqdm([i for i in range(62)]):
                 path_dict[f'test_set_{i}_df'] = f'../test_dfs/{i}.fth'
-        self._load_dfs_from_paths(path_dict=path_dict)
+        # self._load_dfs_from_paths(path_dict=path_dict)
 
     def _split_dfs(self, df, nthread, save_flg=False):
         self._log_print('calculating uniq object_id num')
@@ -938,7 +940,7 @@ class featureCreatorMeta(featureCreator):
 
     def _load(self):
         path_dict = {
-                'meta_features': self.meta_file,
+#                'meta_features': self.meta_file,
                 'set_base_features': self.save_dir + 'set_base_features.ftr',
                 'set_passband_std_upper_features': self.save_dir + 'set_passband_std_upper_features.ftr',
                 'set_passband_detected_features': self.save_dir + 'set_passband_detected_features.ftr',
@@ -952,6 +954,7 @@ class featureCreatorMeta(featureCreator):
                 'set_deficits_features': self.save_dir + 'set_deficits_features.ftr',
         }
         self._load_dfs_from_paths(path_dict=path_dict)
+        self.src_df_dict['meta_features'] = pd.read_hdf('/home/naoya.taguchi/.kaggle/competitions/PLAsTiCC-2018/kyle_final_augment.h5', 'meta')
 
         self.src_df_dict['merged_meta_df'] = self.src_df_dict['meta_features']
         self._log_print('merging meta dfs ...')
@@ -1045,9 +1048,11 @@ class featureCreatorTsfresh(featureCreator):
         if self.train:
             path_dict = {
                     'set_df': self.load_dir + 'training_set.csv'}
+                    #'set_df': self.load_dir + 'training_set.csv'}
+            self.src_df_dict['set_df'] = pd.read_hdf('/home/naoya.taguchi/.kaggle/competitions/PLAsTiCC-2018/kyle_final_augment.h5', 'df')
         else:
             path_dict = {'set_df': self.load_dir + 'test_set.fth'}
-        self._load_dfs_from_paths(path_dict=path_dict)
+            self._load_dfs_from_paths(path_dict=path_dict)
 
     def _get_tsfresh_feats(self, set_df, nthread):
         # tsfresh features

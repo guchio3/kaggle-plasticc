@@ -247,7 +247,7 @@ def wloss_objective_gumbel(preds, train_data):
     y_h /= ys
     y_p = torch.tensor(preds, requires_grad=True).type(torch.FloatTensor)
     y_r = y_p.reshape(len(classes), -1).transpose(0, 1)
-    y_r = torch.clamp(y_r, e-15, 1-e-15)
+    y_r = torch.clamp(y_r, 1e-15, 1 - 1e-15)
     ln_p = _gumbel_softmax_sample(torch.log(y_r))
 #    ln_p = torch.log_softmax(y_r, dim=1)
     wll = torch.sum(y_h * ln_p, dim=0)
@@ -272,7 +272,7 @@ def wloss_metric_gumbel(preds, train_data):
     if len(y_p.shape) == 1:
         y_p = y_p.reshape(len(classes), -1).transpose(0, 1)
     #ln_p = torch.log_softmax(y_p, dim=1)
-    y_p = torch.clamp(y_p, e-15, 1-e-15)
+    y_p = torch.clamp(y_p, 1e-15, 1 - 1e-15)
     ln_p = _gumbel_softmax_sample(torch.log(y_p))
     wll = torch.sum(y_h * ln_p, dim=0)
     loss = -torch.dot(weight_tensor, wll) / torch.sum(weight_tensor)

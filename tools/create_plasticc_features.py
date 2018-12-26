@@ -190,7 +190,7 @@ def main(args):
             src_df_dict=preprocessed_src_df_dict,
             logger=logger,
             nthread=args.nthread)
-    #my_skkt_feat_creator.run().save()
+#    my_skkt_feat_creator.run().save()
 
     del my_skkt_feat_creator
     gc.collect()
@@ -205,7 +205,7 @@ def main(args):
             src_df_dict=preprocessed_src_df_dict,
             logger=logger,
             nthread=args.nthread)
-    #deficits_feat_creator.run().save()
+#    deficits_feat_creator.run().save()
 
     del deficits_feat_creator
     gc.collect()
@@ -224,7 +224,7 @@ def main(args):
             logger=logger,
             nthread=args.nthread,
             train=args.train)
-#    tsfresh_feat_creator.run().save()
+    tsfresh_feat_creator.run().save()
     del tsfresh_feat_creator
     gc.collect()
 

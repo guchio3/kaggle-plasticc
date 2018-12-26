@@ -148,10 +148,7 @@ def plt_confusion_matrics():
 
 def main(args, features):
     FEATURES_TO_USE = features
-    #FEATURES_TO_USE = pd.read_csv('./importances/Booster_weight-multi-logloss-0.521646_2018-12-17-13-29-29_importance.csv').sort_values('importance_mean', ascending=False).head(150).feature.tolist()# + ['object_id']
-    FEATURES_TO_USE = pd.read_csv('./importances/Booster_weight-multi-logloss-0.528846_2018-12-17-06-30-21_importance.csv').sort_values('importance_mean', ascending=False).head(220).feature.tolist()# + ['object_id']
-#####    FEATURES_TO_USE = pd.read_csv('./importances/Booster_weight-multi-logloss-0.534367_2018-12-15-18-49-06_importance.csv').sort_values('importance_mean', ascending=False).head(165).feature.tolist()# + ['object_id']
-#    FEATURES_TO_USE = pd.read_csv('./importances/Booster_weight-multi-logloss-0.534367_2018-12-15-18-49-06_importance.csv').head(165).feature.tolist()# + ['object_id']
+    FEATURES_TO_USE = pd.read_csv('./importances/Booster_weight-multi-logloss-0.528846_2018-12-17-06-30-21_importance.csv').sort_values('importance_mean', ascending=False).head(220).feature.tolist()
     logger = getLogger(__name__)
     logInit(logger, log_dir='./log/', log_filename='train.log')
     logger.info(
@@ -203,7 +200,13 @@ def main(args, features):
     skf = StratifiedKFold(n_splits=FOLD_NUM, shuffle=True, random_state=71)
 #    folds = skf.split(
 #        train_df.drop('target', axis=1), le.transform(train_df.target))
-    folds = skf.split(x_train, y_train)
+#    folds = skf.split(x_train, y_train)
+    kyle_df = pd.read_hdf('/home/naoya.taguchi/.kaggle/competitions/PLAsTiCC-2018/kyle_final_augment.h5', 'meta').reset_index()
+    folds = []
+    for fold in range(5):
+        _trn_idx = kyle_df.query(f'fold != {fold}').index.tolist()
+        _val_idx = kyle_df.query(f'fold == {fold}').index.tolist()
+        folds.append([_trn_idx, _val_idx])
 
     logger.info('the shape of x_train : {}'.format(x_train.shape))
     # logger.info('the shape of train_df : {}'.format(train_df.shape))

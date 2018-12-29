@@ -18,7 +18,7 @@ import seaborn as sns
 
 from tools.my_logging import logInit
 from tools.feature_tools import feature_engineering
-from tools.objective_function import weighted_multi_logloss, lgb_multi_weighted_logloss, wloss_objective, wloss_metric, softmax, calc_team_score, wloss_metric_for_zeropad, wloss_objective_gumbel, wloss_metric_gumbel
+from tools.objective_function import weighted_multi_logloss, lgb_multi_weighted_logloss, wloss_objective, wloss_metric, softmax, calc_team_score, wloss_metric_for_zeropad
 from tools.model_io import save_models, load_models
 from tools.fold_resampling import get_fold_resampling_dict
 
@@ -38,6 +38,8 @@ FOLD_NUM = 5
 SAMPLING_LOWER = 60
 # SAMPLING_LOWER = 10
 SAMPLING_LOWER_RATE = 2.
+
+SEEDS = [71, 1000, 0, 99, 713]
 
 
 
@@ -148,7 +150,9 @@ def plt_confusion_matrics():
 
 def main(args, features):
     FEATURES_TO_USE = features
-#    FEATURES_TO_USE = pd.read_csv('./importances/Booster_weight-multi-logloss-0.528846_2018-12-17-06-30-21_importance.csv').sort_values('importance_mean', ascending=False).head(220).feature.tolist()
+    FEATURES_TO_USE = pd.read_csv('./importances/Booster_weight-multi-logloss-0.528846_2018-12-17-06-30-21_importance.csv').sort_values('importance_mean', ascending=False).head(220).feature.tolist()# + ['object_id']
+#    FEATURES_TO_USE = pd.read_csv('./importances/Booster_weight-multi-logloss-0.534367_2018-12-15-18-49-06_importance.csv').sort_values('importance_mean', ascending=False).head(165).feature.tolist()# + ['object_id']
+#    FEATURES_TO_USE = pd.read_csv('./importances/Booster_weight-multi-logloss-0.534367_2018-12-15-18-49-06_importance.csv').head(165).feature.tolist()# + ['object_id']
     logger = getLogger(__name__)
     logInit(logger, log_dir='./log/', log_filename='train.log')
     logger.info(
@@ -197,353 +201,305 @@ def main(args, features):
         label=le.transform(train_df['target'].values),
     )
 
-    skf = StratifiedKFold(n_splits=FOLD_NUM, shuffle=True, random_state=71)
-#    folds = skf.split(
-#        train_df.drop('target', axis=1), le.transform(train_df.target))
-#    folds = skf.split(x_train, y_train)
-    kyle_df = pd.read_hdf('/home/naoya.taguchi/.kaggle/competitions/PLAsTiCC-2018/kyle_final_augment.h5', 'meta').reset_index()
-    folds = []
-    for fold in range(5):
-        _trn_idx = kyle_df.query(f'fold != {fold}').index.tolist()
-        _val_idx = kyle_df.query(f'fold == {fold}').index.tolist()
-        folds.append([_trn_idx, _val_idx])
+    for seed in SEEDS:
+        PARAMS['seed'] = seed
+    
+        logger.info('the shape of x_train : {}'.format(x_train.shape))
+        # logger.info('the shape of train_df : {}'.format(train_df.shape))
+        logger.debug('the cols of train_df : {}'.
+                    format(train_df.drop('target', axis=1).columns.tolist()))
+    #    categotical_features = ['passband_maxes_argmaxes', ]
+    #    categorical_features_idx = np.argwhere(train_df.drop('target', axis=1).columns == 'passband_maxes_argmaxes')[0]
+    #    logger.debug('categorical features are : {}'.format(categotical_features))
+    #    logger.debug('categorical features indexes are : {}'.format(categotical_features))
+    #    PARAMS['categorical_feature'] = categorical_features_idx
+    
+    
+        if True:
+            best_scores = []
+            team_scores = []
+            zeropad_scores = []
+            val_pred_score_zeropads = []
+            trained_models = []
+            best_iterations = []
+            oof = []
 
-    logger.info('the shape of x_train : {}'.format(x_train.shape))
-    # logger.info('the shape of train_df : {}'.format(train_df.shape))
-    logger.debug('the cols of train_df : {}'.
-                format(train_df.drop('target', axis=1).columns.tolist()))
-#    categotical_features = ['passband_maxes_argmaxes', ]
-#    categorical_features_idx = np.argwhere(train_df.drop('target', axis=1).columns == 'passband_maxes_argmaxes')[0]
-#    logger.debug('categorical features are : {}'.format(categotical_features))
-#    logger.debug('categorical features indexes are : {}'.format(categotical_features))
-#    PARAMS['categorical_feature'] = categorical_features_idx
+            x_train = train_df.drop('target', axis=1).values
+            y_train = le.transform(train_df['target'].values)
 
+            skf = StratifiedKFold(n_splits=FOLD_NUM, shuffle=True, random_state=seed)
+            folds = skf.split(x_train, y_train)
 
-    if False:  # args.with_test:
-        cv_hist = lightgbm.cv(
-            params=PARAMS,
-            folds=folds,
-            train_set=train_set,
-            nfold=FOLD_NUM,
-            verbose_eval=100,
-            feval=lgb_multi_weighted_logloss,
-        )
-        logger.info('best_scores : {}'.format(
-            np.min(cv_hist['multi_logloss-mean'])))
-        logger.debug(cv_hist)
-
-    elif False:
-        best_scores = []
-        trained_models = []
-        x_train = train_df.drop('target', axis=1).values
-        y_train = train_df['target'].values
-        train_columns = train_df.drop('target', axis=1).columns
-        feature_importance_df = pd.DataFrame()
-        i = 1
-
-        for trn_idx, val_idx in tqdm(list(folds)):
-            x_trn, x_val = x_train[trn_idx], x_train[val_idx]
-            y_trn, y_val = y_train[trn_idx], y_train[val_idx]
-            lgb = lightgbm.LGBMClassifier(**PARAMS)
-            lgb.fit(x_trn, y_trn,
-                    eval_set=[(x_trn, y_trn), (x_val, y_val)],
-                    verbose=100,
-                    eval_metric=lgb_multi_weighted_logloss,
-                    #                    eval_metric=weighted_multi_logloss,
-                    #                    eval_metric='multi_logloss',
-                    )
-#            logger.info('best_itr : {}'.format(lgb.best_iteration_))
-            logger.info('best_scores : {}'.format(lgb.best_score_))
-            best_scores.append(lgb.best_score_['valid_1']['wloss'])
-            trained_models.append(lgb)
-            fold_importance_df = pd.DataFrame()
-            fold_importance_df["feature"] = train_columns
-            fold_importance_df["importance"] = lgb.feature_importances_
-            fold_importance_df["fold"] = i
-            feature_importance_df = pd.concat(
-                [feature_importance_df, fold_importance_df], axis=0)
-            i += 1
-    else:
-        best_scores = []
-        team_scores = []
-        zeropad_scores = []
-        val_pred_score_zeropads = []
-        trained_models = []
-        best_iterations = []
-        oof = []
-        x_train = train_df.drop('target', axis=1).values
-        y_train = le.transform(train_df['target'].values)
-        train_columns = train_df.drop('target', axis=1).columns
-        distmod_col = np.where(train_columns == 'distmod')[0]
-        feature_importance_df = pd.DataFrame()
-        feature_importance_df['feature'] = train_columns
-        conf_y_true = []
-        conf_y_pred = []
-        i = 1
-
-        for trn_idx, val_idx in tqdm(list(folds)):
-            x_trn, x_val = x_train[trn_idx], x_train[val_idx]
-            y_trn, y_val = y_train[trn_idx], y_train[val_idx]
-
-            fold_resampling_dict = \
-                get_fold_resampling_dict(
-                    y_trn,
-                    logger,
-                    SAMPLING_LOWER,
-                    SAMPLING_LOWER_RATE)
-            ros = RandomOverSampler(
-                ratio=fold_resampling_dict,
-                random_state=71)
-            x_trn, y_trn = ros.fit_sample(x_trn, y_trn)
-
-            train_dataset = lightgbm.Dataset(x_trn, y_trn)
-            valid_dataset = lightgbm.Dataset(x_val, y_val)
-            booster = lightgbm.train(
-                PARAMS.copy(), train_dataset,
-                num_boost_round=20000,
-                fobj=wloss_objective,
-                #fobj=wloss_objective_gumbel,
-                feval=wloss_metric,
-                #feval=wloss_metric_gumbel,
-                valid_sets=[train_dataset, valid_dataset],
-                verbose_eval=100,
-                early_stopping_rounds=100,
-            )
-            logger.debug('valid info : {}'.format(booster.best_score))
-            logger.info('best score : {}'.format(booster.best_score['valid_1']['wloss']))
-            logger.info('best iteration : {}'.format(booster.best_iteration))
-            best_scores.append(booster.best_score['valid_1']['wloss'])
-            best_iterations.append(booster.best_iteration)
-            trained_models.append(booster)
-            fold_importance_df = pd.DataFrame()
-            fold_importance_df["feature"] = train_columns
-            fold_importance_df["importance_{}".format(i)] = booster.feature_importance('gain')
-            feature_importance_df = feature_importance_df.merge(fold_importance_df, on='feature', how='left')
-            #feature_importance_df = pd.concat(
-            #    [feature_importance_df, fold_importance_df], axis=0)
-            val_pred_score = softmax(booster.predict(x_val, raw_score=False))
-            val_pred_score_zeropad = booster.predict(x_val, raw_score=False)
-            oof.append([val_pred_score_zeropad, y_val, val_idx])
-            gal_cols = [0, 2, 5, 8, 12]
-            ext_gal_cols = [1, 3, 4, 6, 7, 9, 10, 11, 13]
-            gal_rows = np.where(np.isnan(np.array(x_val[:, distmod_col], dtype=float)))[0]
-            ext_gal_rows = np.where(~np.isnan(np.array(x_val[:, distmod_col], dtype=float)))[0]
-            #val_pred_score_zeropad.loc[ext_gal_rows, gal_cols] = 0.
-            #val_pred_score_zeropad.loc[gal_rows, ext_gal_cols] = 0.
-            zeropad_score = wloss_metric_for_zeropad(
-                    val_pred_score_zeropad, valid_dataset,
-                    gal_cols=gal_cols, ext_gal_cols=ext_gal_cols,
-                    gal_rows=gal_rows, ext_gal_rows=ext_gal_rows)
-            logger.info('zeropad score : {}'.format(zeropad_score))
-            team_score = calc_team_score(y_val, val_pred_score)
-            logger.info('team score : {}'.format(team_score))
-            team_scores.append(team_score)
-            zeropad_scores.append(zeropad_score)
-            val_pred_score_zeropads.append(pd.concat([pd.DataFrame(val_pred_score_zeropad), pd.Series(y_val)], axis=1))
-            conf_y_true.append(y_val)
-            conf_y_pred.append(np.argmax(val_pred_score, axis=1))
-            # conf_y_true.append(np.argmax(val_pred_score, axis=1))
-            # conf_y_pred.append(y_val)
-            i += 1
-
-        mean_best_score = np.mean(best_scores)
-        mean_team_score = np.mean(team_scores)
-        mean_best_iteration = np.mean(best_iterations)
-        mean_zeropads_score = np.mean(np.array(zeropad_scores, dtype=float))
-        logger.info('mean valid score is {}'.format(mean_best_score))
-        logger.info('mean team score is {}'.format(mean_team_score))
-        logger.info('mean best iteration is {}'.format(mean_best_iteration))
-        #logger.info('mean zeropad score is {}'.format(mean_zeropads_score))
-        val_pred_score_zeropads_path = './val_pred_score_zeropads/{}_weight-multi-logloss-{:.6}_{}.pkl'\
-            .format(trained_models[0].__class__.__name__,
-                    mean_zeropads_score,
-                    start_time, )
-        with open(val_pred_score_zeropads_path, 'wb') as fout:
-            pickle.dump(val_pred_score_zeropads, fout)
-        oof_path = './oof/{}_weight-multi-logloss-{:.6}_{}.pkl'\
-            .format(trained_models[0].__class__.__name__,
-                    mean_best_score,
-                    start_time, )
-        with open(oof_path, 'wb') as fout:
-            pickle.dump(oof, fout)
-
-        models_path = './trained_models/{}_weight-multi-logloss-{:.6}_{}.pkl'\
-            .format(trained_models[0].__class__.__name__,
-                    mean_best_score,
-                    start_time, )
-        logger.info('saving models to {} ...'.format(models_path))
-        save_models(trained_models, models_path)
-
-        imp_path = './importances/{}_weight-multi-logloss-{:.6}_{}_importance.png'\
-            .format(trained_models[0].__class__.__name__,
-                    mean_best_score,
-                    start_time, )
-        logger.info('saving importance to {} ...'.format(models_path))
-        save_importance(feature_importance_df, imp_path)
-
-        conf_path = './confusion_matrices/{}_weight-multi-logloss-{:.6}_{}_confusion.png'\
-            .format(trained_models[0].__class__.__name__,
-                    mean_best_score,
-                    start_time, )
-        logger.info('saving confusion matrix to {} ...'.format(models_path))
-        conf_y_pred = np.concatenate(conf_y_pred)
-        conf_y_true = np.concatenate(conf_y_true)
-        cm = confusion_matrix(conf_y_true, conf_y_pred)
-        classes = ['class_' + str(clnum)
-                for clnum in [6, 15, 16, 42, 52, 53, 62, 64, 65, 67, 88, 90, 92, 95]]
-        cm_df = pd.DataFrame(cm, index=classes, columns=classes)
-        cm_df[cm_df.columns] = cm_df.values / cm_df.sum(axis=1).values.reshape(-1, 1)
-        plt.figure(figsize=(14, 14))
-        sns.heatmap(cm_df, annot=True, cmap=plt.cm.Blues)
-        #plt.imshow(cm_df.values, interpolat='nearest', cmap=plt.cm.Blues)
-        plt.title('score : {}'.format(mean_best_score))
-        plt.ylabel('True label')
-        plt.xlabel('Predicted label')
-        plt.savefig(conf_path)
-
-        if args.with_test:
-            logger.info('start linear interpolation training')
-            interpolated_num_boost_round =\
-                    int(mean_best_iteration * FOLD_NUM / (FOLD_NUM - 1))
-            logger.info('the num boost round is {}'.format(interpolated_num_boost_round))
-
-            fold_resampling_dict = \
-                get_fold_resampling_dict(
-                    y_train,
-                    logger,
-                    SAMPLING_LOWER,
-                    SAMPLING_LOWER_RATE)
-            ros = RandomOverSampler(
-                ratio=fold_resampling_dict,
-                random_state=71)
-            x_train, y_train = ros.fit_sample(x_train, y_train)
-
-            train_dataset = lightgbm.Dataset(x_train, y_train)
-            lin_booster = lightgbm.train(
-                PARAMS.copy(), train_dataset,
-                num_boost_round=interpolated_num_boost_round,
-                fobj=wloss_objective,
-                feval=wloss_metric,
-                valid_sets=[train_dataset, ],
-                verbose_eval=100,
-                early_stopping_rounds=100
-)
-            logger.info('best score : {}'.format(lin_booster.best_score))
-            models_path = './trained_models/{}_weight-multi-logloss-{:.6}_{}_linear_interpolated.pkl'\
-                .format(lin_booster.__class__.__name__,
+            train_columns = train_df.drop('target', axis=1).columns
+            distmod_col = np.where(train_columns == 'distmod')[0]
+            feature_importance_df = pd.DataFrame()
+            feature_importance_df['feature'] = train_columns
+            conf_y_true = []
+            conf_y_pred = []
+            i = 1
+    
+            for trn_idx, val_idx in tqdm(list(folds)):
+                x_trn, x_val = x_train[trn_idx], x_train[val_idx]
+                y_trn, y_val = y_train[trn_idx], y_train[val_idx]
+    
+                fold_resampling_dict = \
+                    get_fold_resampling_dict(
+                        y_trn,
+                        logger,
+                        SAMPLING_LOWER,
+                        SAMPLING_LOWER_RATE)
+                ros = RandomOverSampler(
+                    ratio=fold_resampling_dict,
+                    random_state=71)
+                x_trn, y_trn = ros.fit_sample(x_trn, y_trn)
+    
+                train_dataset = lightgbm.Dataset(x_trn, y_trn)
+                valid_dataset = lightgbm.Dataset(x_val, y_val)
+                booster = lightgbm.train(
+                    PARAMS.copy(), train_dataset,
+                    num_boost_round=2000,
+                    fobj=wloss_objective,
+                    feval=wloss_metric,
+                    valid_sets=[train_dataset, valid_dataset],
+                    verbose_eval=100,
+                    early_stopping_rounds=100,
+                )
+                logger.debug('valid info : {}'.format(booster.best_score))
+                logger.info('best score : {}'.format(booster.best_score['valid_1']['wloss']))
+                logger.info('best iteration : {}'.format(booster.best_iteration))
+                best_scores.append(booster.best_score['valid_1']['wloss'])
+                best_iterations.append(booster.best_iteration)
+                trained_models.append(booster)
+                fold_importance_df = pd.DataFrame()
+                fold_importance_df["feature"] = train_columns
+                fold_importance_df["importance_{}".format(i)] = booster.feature_importance('gain')
+                feature_importance_df = feature_importance_df.merge(fold_importance_df, on='feature', how='left')
+                #feature_importance_df = pd.concat(
+                #    [feature_importance_df, fold_importance_df], axis=0)
+                val_pred_score = softmax(booster.predict(x_val, raw_score=False))
+                val_pred_score_zeropad = booster.predict(x_val, raw_score=False)
+                oof.append([val_pred_score_zeropad, y_val, val_idx])
+                gal_cols = [0, 2, 5, 8, 12]
+                ext_gal_cols = [1, 3, 4, 6, 7, 9, 10, 11, 13]
+                gal_rows = np.where(np.isnan(np.array(x_val[:, distmod_col], dtype=float)))[0]
+                ext_gal_rows = np.where(~np.isnan(np.array(x_val[:, distmod_col], dtype=float)))[0]
+                #val_pred_score_zeropad.loc[ext_gal_rows, gal_cols] = 0.
+                #val_pred_score_zeropad.loc[gal_rows, ext_gal_cols] = 0.
+                zeropad_score = wloss_metric_for_zeropad(
+                        val_pred_score_zeropad, valid_dataset,
+                        gal_cols=gal_cols, ext_gal_cols=ext_gal_cols,
+                        gal_rows=gal_rows, ext_gal_rows=ext_gal_rows)
+                logger.info('zeropad score : {}'.format(zeropad_score))
+                team_score = calc_team_score(y_val, val_pred_score)
+                logger.info('team score : {}'.format(team_score))
+                team_scores.append(team_score)
+                zeropad_scores.append(zeropad_score)
+                val_pred_score_zeropads.append(pd.concat([pd.DataFrame(val_pred_score_zeropad), pd.Series(y_val)], axis=1))
+                conf_y_true.append(y_val)
+                conf_y_pred.append(np.argmax(val_pred_score, axis=1))
+                # conf_y_true.append(np.argmax(val_pred_score, axis=1))
+                # conf_y_pred.append(y_val)
+                i += 1
+    
+            mean_best_score = np.mean(best_scores)
+            mean_team_score = np.mean(team_scores)
+            mean_best_iteration = np.mean(best_iterations)
+            mean_zeropads_score = np.mean(np.array(zeropad_scores, dtype=float))
+            logger.info('mean valid score is {}'.format(mean_best_score))
+            logger.info('mean team score is {}'.format(mean_team_score))
+            logger.info('mean best iteration is {}'.format(mean_best_iteration))
+            #logger.info('mean zeropad score is {}'.format(mean_zeropads_score))
+            val_pred_score_zeropads_path = './val_pred_score_zeropads/{}_weight-multi-logloss-{:.6}_{}.pkl'\
+                .format(trained_models[0].__class__.__name__,
+                        mean_zeropads_score,
+                        start_time, )
+            with open(val_pred_score_zeropads_path, 'wb') as fout:
+                pickle.dump(val_pred_score_zeropads, fout)
+            oof_path = './oof/{}_weight-multi-logloss-{:.6}_{}.pkl'\
+                .format(trained_models[0].__class__.__name__,
+                        mean_best_score,
+                        start_time, )
+            with open(oof_path, 'wb') as fout:
+                pickle.dump(oof, fout)
+    
+            models_path = './trained_models/{}_weight-multi-logloss-{:.6}_{}.pkl'\
+                .format(trained_models[0].__class__.__name__,
                         mean_best_score,
                         start_time, )
             logger.info('saving models to {} ...'.format(models_path))
-            save_models(lin_booster, models_path)
-
-            #            logger.info('loading test_set.csv')
-            #            test_set_df = pd.read_feather(
-            #                BASE_DIR + 'test_set.fth', nthreads=args.nthread)
-#####            logger.info('loading test_set_metadata.csv')
-#####            test_set_metadata_df = pd.read_csv(
-#####                BASE_DIR + 'test_set_metadata.csv')
-            # object_ids = test_set_metadata_df.object_id
-
-#####            logger.info('feature engineering for test set...')
-#####            test_df = feature_engineering(
-#####                None,
-#####                test_set_metadata_df,
-#####                nthread=args.nthread,
-#####                test_flg=True,
-#####                logger=logger)
-
-            logger.info('loading test_df ...')
-            test_df = pd.read_feather('./features/test/meta_features.ftr', nthreads=args.nthread)
-
-#            with open('./lcfit/LCfit_feature_test_v1_20181203.pkl', 'rb') as fin:
-#                test_df = test_df[list(set(test_df.columns.tolist()) & set(FEATURES_TO_USE)) + ['object_id']].\
-#                        merge(pickle.load(fin), on='object_id', how='left')
-
-            object_ids = test_df.object_id
-
-            test_df.drop('object_id', axis=1, inplace=True)
-            test_df = test_df[FEATURES_TO_USE]
-
-
-#            test_df = feature_engineering(
-#                test_set_df,
-#                test_set_metadata_df,
-#                nthread=args.nthread,
-#                test_flg=True,
-#                logger=logger)
-            test_df.reset_index(drop=True).to_feather('./test_dfs/test_df_for_nn.fth')
-#####            test_df.drop('object_id', axis=1, inplace=True)
-
-            logger.info(f'test cols {test_df.columns.tolist()}')
-            x_test = test_df.values
-            logger.info(f'test size: {x_test.shape}')
-
-            logger.info('predicting')
-            test_reses = []
-            for lgb in tqdm(trained_models):
-                test_reses.append(
-                    softmax(lgb.predict(x_test, raw_score=False)))
-                # test_reses.append(lgb.predict_proba(x_test, raw_score=False))
-
-#            res = np.clip(np.mean(test_reses, axis=0),
-#                          10**(-15), 1 - 10**(-15))
-
-            # prediction of linear interpolated
-            lin_test_res = \
-                    softmax(lin_booster.predict(x_test, raw_score=False))
-
-#            test_reses.append(lin_test_res)
-#            temp_filename = './temp/{}_weight-multi-logloss-{:.6}_{}_res.csv'\
-#                .format(trained_models[0].__class__.__name__,
-#                        mean_best_score,
-#                        start_time,)
-#            with open(temp_filename, 'wb') as fout:
-#                pickle.dump(test_reses + [lin_test_res], fout)
-
-            res = np.clip(np.mean(
-                          [np.mean(test_reses, axis=0),
-                           lin_test_res],
-                          axis=0),
-                  10**(-15), 1 - 10**(-15))
-            preds_99 = np.ones((res.shape[0]))
-            for i in range(res.shape[1]):
-                preds_99 *= (1 - res[:, i])
-            preds_99 = 0.14 * preds_99 / np.mean(preds_99)
-            #res *= 8/9
-            #preds_99 = 1/9
-
-            # res = np.concatenate((res, preds_99), axis=1)
-            # res = np.concatenate((res, np.zeros((res.shape[0], 1))), axis=1)
-            logger.info('now creating the submission file ...')
-            res_df = pd.DataFrame(res, columns=[
-                'class_6',
-                'class_15',
-                'class_16',
-                'class_42',
-                'class_52',
-                'class_53',
-                'class_62',
-                'class_64',
-                'class_65',
-                'class_67',
-                'class_88',
-                'class_90',
-                'class_92',
-                'class_95',
-                #                'class_99',
-            ])
-            res_df['class_99'] = preds_99
-            submission_file_name = './submissions/{}_weight-multi-logloss-{:.6}_{}.csv'\
+            save_models(trained_models, models_path)
+    
+            imp_path = './importances/{}_weight-multi-logloss-{:.6}_{}_importance.png'\
                 .format(trained_models[0].__class__.__name__,
                         mean_best_score,
-                        start_time,)
-            logger.info(
-                'saving the test result to {}'.format(submission_file_name))
-            pd.concat([object_ids, res_df], axis=1)\
-                .to_csv(submission_file_name, index=False)
-
+                        start_time, )
+            logger.info('saving importance to {} ...'.format(models_path))
+            save_importance(feature_importance_df, imp_path)
+    
+            conf_path = './confusion_matrices/{}_weight-multi-logloss-{:.6}_{}_confusion.png'\
+                .format(trained_models[0].__class__.__name__,
+                        mean_best_score,
+                        start_time, )
+            logger.info('saving confusion matrix to {} ...'.format(models_path))
+            conf_y_pred = np.concatenate(conf_y_pred)
+            conf_y_true = np.concatenate(conf_y_true)
+            cm = confusion_matrix(conf_y_true, conf_y_pred)
+            classes = ['class_' + str(clnum)
+                    for clnum in [6, 15, 16, 42, 52, 53, 62, 64, 65, 67, 88, 90, 92, 95]]
+            cm_df = pd.DataFrame(cm, index=classes, columns=classes)
+            cm_df[cm_df.columns] = cm_df.values / cm_df.sum(axis=1).values.reshape(-1, 1)
+            plt.figure(figsize=(14, 14))
+            sns.heatmap(cm_df, annot=True, cmap=plt.cm.Blues)
+            #plt.imshow(cm_df.values, interpolat='nearest', cmap=plt.cm.Blues)
+            plt.title('score : {}'.format(mean_best_score))
+            plt.ylabel('True label')
+            plt.xlabel('Predicted label')
+            plt.savefig(conf_path)
+    
+            if args.with_test:
+                logger.info('start linear interpolation training')
+                interpolated_num_boost_round =\
+                        int(mean_best_iteration * FOLD_NUM / (FOLD_NUM - 1))
+                logger.info('the num boost round is {}'.format(interpolated_num_boost_round))
+    
+                fold_resampling_dict = \
+                    get_fold_resampling_dict(
+                        y_train,
+                        logger,
+                        SAMPLING_LOWER,
+                        SAMPLING_LOWER_RATE)
+                ros = RandomOverSampler(
+                    ratio=fold_resampling_dict,
+                    random_state=71)
+                _x_train, _y_train = ros.fit_sample(x_train, y_train)
+    
+                train_dataset = lightgbm.Dataset(_x_train, _y_train)
+                lin_booster = lightgbm.train(
+                    PARAMS.copy(), train_dataset,
+                    num_boost_round=interpolated_num_boost_round,
+                    fobj=wloss_objective,
+                    feval=wloss_metric,
+                    valid_sets=[train_dataset, ],
+                    verbose_eval=100,
+                    early_stopping_rounds=100
+    )
+                logger.info('best score : {}'.format(lin_booster.best_score))
+                models_path = './trained_models/{}_weight-multi-logloss-{:.6}_{}_linear_interpolated.pkl'\
+                    .format(lin_booster.__class__.__name__,
+                            mean_best_score,
+                            start_time, )
+                logger.info('saving models to {} ...'.format(models_path))
+                save_models(lin_booster, models_path)
+    
+                #            logger.info('loading test_set.csv')
+                #            test_set_df = pd.read_feather(
+                #                BASE_DIR + 'test_set.fth', nthreads=args.nthread)
+    #####            logger.info('loading test_set_metadata.csv')
+    #####            test_set_metadata_df = pd.read_csv(
+    #####                BASE_DIR + 'test_set_metadata.csv')
+                # object_ids = test_set_metadata_df.object_id
+    
+    #####            logger.info('feature engineering for test set...')
+    #####            test_df = feature_engineering(
+    #####                None,
+    #####                test_set_metadata_df,
+    #####                nthread=args.nthread,
+    #####                test_flg=True,
+    #####                logger=logger)
+    
+                if seed == 71:
+                    logger.info('loading test_df ...')
+                    test_df = pd.read_feather('./features/test/meta_features.ftr', nthreads=args.nthread)
+    
+    #            with open('./lcfit/LCfit_feature_test_v1_20181203.pkl', 'rb') as fin:
+    #                test_df = test_df[list(set(test_df.columns.tolist()) & set(FEATURES_TO_USE)) + ['object_id']].\
+    #                        merge(pickle.load(fin), on='object_id', how='left')
+    
+                    object_ids = test_df.object_id
+    
+                    test_df.drop('object_id', axis=1, inplace=True)
+                    test_df = test_df[FEATURES_TO_USE]
+    
+    
+    #            test_df = feature_engineering(
+    #                test_set_df,
+    #                test_set_metadata_df,
+    #                nthread=args.nthread,
+    #                test_flg=True,
+    #                logger=logger)
+                    test_df.reset_index(drop=True).to_feather('./test_dfs/test_df_for_nn.fth')
+    #####            test_df.drop('object_id', axis=1, inplace=True)
+    
+                logger.info(f'test cols {test_df.columns.tolist()}')
+                x_test = test_df.values
+                logger.info(f'test size: {x_test.shape}')
+    
+                logger.info('predicting')
+                test_reses = []
+                for lgb in tqdm(trained_models):
+                    test_reses.append(
+                        softmax(lgb.predict(x_test, raw_score=False)))
+                    # test_reses.append(lgb.predict_proba(x_test, raw_score=False))
+    
+    #            res = np.clip(np.mean(test_reses, axis=0),
+    #                          10**(-15), 1 - 10**(-15))
+    
+                # prediction of linear interpolated
+                lin_test_res = \
+                        softmax(lin_booster.predict(x_test, raw_score=False))
+    
+    #            test_reses.append(lin_test_res)
+    #            temp_filename = './temp/{}_weight-multi-logloss-{:.6}_{}_res.csv'\
+    #                .format(trained_models[0].__class__.__name__,
+    #                        mean_best_score,
+    #                        start_time,)
+    #            with open(temp_filename, 'wb') as fout:
+    #                pickle.dump(test_reses + [lin_test_res], fout)
+    
+                res = np.clip(np.mean(
+                              [np.mean(test_reses, axis=0),
+                               lin_test_res],
+                              axis=0),
+                      10**(-15), 1 - 10**(-15))
+                preds_99 = np.ones((res.shape[0]))
+                for i in range(res.shape[1]):
+                    preds_99 *= (1 - res[:, i])
+                preds_99 = 0.14 * preds_99 / np.mean(preds_99)
+                #res *= 8/9
+                #preds_99 = 1/9
+    
+                # res = np.concatenate((res, preds_99), axis=1)
+                # res = np.concatenate((res, np.zeros((res.shape[0], 1))), axis=1)
+                logger.info('now creating the submission file ...')
+                res_df = pd.DataFrame(res, columns=[
+                    'class_6',
+                    'class_15',
+                    'class_16',
+                    'class_42',
+                    'class_52',
+                    'class_53',
+                    'class_62',
+                    'class_64',
+                    'class_65',
+                    'class_67',
+                    'class_88',
+                    'class_90',
+                    'class_92',
+                    'class_95',
+                    #                'class_99',
+                ])
+                res_df['class_99'] = preds_99
+                submission_file_name = './submissions/{}_weight-multi-logloss-{:.6}_{}.csv'\
+                    .format(trained_models[0].__class__.__name__,
+                            mean_best_score,
+                            start_time,)
+                logger.info(
+                    'saving the test result to {}'.format(submission_file_name))
+                pd.concat([object_ids, res_df], axis=1)\
+                    .to_csv(submission_file_name, index=False)
+    
     logger.info('finish !')
-
+    
 
 if __name__ == '__main__':
     args = parse_args()
@@ -1147,278 +1103,8 @@ if __name__ == '__main__':
              'c90_i_z3_dmax',
              'c90_i_z3_fmax',
              'c90_i_z3_dof',
-             'c42_g_z0_chisq',
-             'c42_g_z0_redchisq',
-             'c42_g_z0_dmax',
-             'c42_g_z0_fmax',
-             'c42_g_z0_dof',
-             'c42_g_z1_chisq',
-             'c42_g_z1_redchisq',
-             'c42_g_z1_dmax',
-             'c42_g_z1_fmax',
-             'c42_g_z1_dof',
-             'c42_g_z2_chisq',
-             'c42_g_z2_redchisq',
-             'c42_g_z2_dmax',
-             'c42_g_z2_fmax',
-             'c42_g_z2_dof',
-             'c42_g_z3_chisq',
-             'c42_g_z3_redchisq',
-             'c42_g_z3_dmax',
-             'c42_g_z3_fmax',
-             'c42_g_z3_dof',
-             'c52_g_z0_chisq',
-             'c52_g_z0_redchisq',
-             'c52_g_z0_dmax',
-             'c52_g_z0_fmax',
-             'c52_g_z0_dof',
-             'c52_g_z1_chisq',
-             'c52_g_z1_redchisq',
-             'c52_g_z1_dmax',
-             'c52_g_z1_fmax',
-             'c52_g_z1_dof',
-             'c52_g_z2_chisq',
-             'c52_g_z2_redchisq',
-             'c52_g_z2_dmax',
-             'c52_g_z2_fmax',
-             'c52_g_z2_dof',
-             'c62_g_z0_chisq',
-             'c62_g_z0_redchisq',
-             'c62_g_z0_dmax',
-             'c62_g_z0_fmax',
-             'c62_g_z0_dof',
-             'c62_g_z1_chisq',
-             'c62_g_z1_redchisq',
-             'c62_g_z1_dmax',
-             'c62_g_z1_fmax',
-             'c62_g_z1_dof',
-             'c62_g_z2_chisq',
-             'c62_g_z2_redchisq',
-             'c62_g_z2_dmax',
-             'c62_g_z2_fmax',
-             'c62_g_z2_dof',
-             'c67_g_z0_chisq',
-             'c67_g_z0_redchisq',
-             'c67_g_z0_dmax',
-             'c67_g_z0_fmax',
-             'c67_g_z0_dof',
-             'c67_g_z1_chisq',
-             'c67_g_z1_redchisq',
-             'c67_g_z1_dmax',
-             'c67_g_z1_fmax',
-             'c67_g_z1_dof',
-             'c67_g_z2_chisq',
-             'c67_g_z2_redchisq',
-             'c67_g_z2_dmax',
-             'c67_g_z2_fmax',
-             'c67_g_z2_dof',
-             'c90_g_z0_chisq',
-             'c90_g_z0_redchisq',
-             'c90_g_z0_dmax',
-             'c90_g_z0_fmax',
-             'c90_g_z0_dof',
-             'c90_g_z1_chisq',
-             'c90_g_z1_redchisq',
-             'c90_g_z1_dmax',
-             'c90_g_z1_fmax',
-             'c90_g_z1_dof',
-             'c90_g_z2_chisq',
-             'c90_g_z2_redchisq',
-             'c90_g_z2_dmax',
-             'c90_g_z2_fmax',
-             'c90_g_z2_dof',
-             'c90_g_z3_chisq',
-             'c90_g_z3_redchisq',
-             'c90_g_z3_dmax',
-             'c90_g_z3_fmax',
-             'c90_g_z3_dof',
-             'c42_r_z0_chisq',
-             'c42_r_z0_redchisq',
-             'c42_r_z0_dmax',
-             'c42_r_z0_fmax',
-             'c42_r_z0_dof',
-             'c42_r_z1_chisq',
-             'c42_r_z1_redchisq',
-             'c42_r_z1_dmax',
-             'c42_r_z1_fmax',
-             'c42_r_z1_dof',
-             'c42_r_z2_chisq',
-             'c42_r_z2_redchisq',
-             'c42_r_z2_dmax',
-             'c42_r_z2_fmax',
-             'c42_r_z2_dof',
-             'c42_r_z3_chisq',
-             'c42_r_z3_redchisq',
-             'c42_r_z3_dmax',
-             'c42_r_z3_fmax',
-             'c42_r_z3_dof',
-             'c52_r_z0_chisq',
-             'c52_r_z0_redchisq',
-             'c52_r_z0_dmax',
-             'c52_r_z0_fmax',
-             'c52_r_z0_dof',
-             'c52_r_z1_chisq',
-             'c52_r_z1_redchisq',
-             'c52_r_z1_dmax',
-             'c52_r_z1_fmax',
-             'c52_r_z1_dof',
-             'c52_r_z2_chisq',
-             'c52_r_z2_redchisq',
-             'c52_r_z2_dmax',
-             'c52_r_z2_fmax',
-             'c52_r_z2_dof',
-             'c62_r_z0_chisq',
-             'c62_r_z0_redchisq',
-             'c62_r_z0_dmax',
-             'c62_r_z0_fmax',
-             'c62_r_z0_dof',
-             'c62_r_z1_chisq',
-             'c62_r_z1_redchisq',
-             'c62_r_z1_dmax',
-             'c62_r_z1_fmax',
-             'c62_r_z1_dof',
-             'c62_r_z2_chisq',
-             'c62_r_z2_redchisq',
-             'c62_r_z2_dmax',
-             'c62_r_z2_fmax',
-             'c62_r_z2_dof',
-             'c67_r_z0_chisq',
-             'c67_r_z0_redchisq',
-             'c67_r_z0_dmax',
-             'c67_r_z0_fmax',
-             'c67_r_z0_dof',
-             'c67_r_z1_chisq',
-             'c67_r_z1_redchisq',
-             'c67_r_z1_dmax',
-             'c67_r_z1_fmax',
-             'c67_r_z1_dof',
-             'c67_r_z2_chisq',
-             'c67_r_z2_redchisq',
-             'c67_r_z2_dmax',
-             'c67_r_z2_fmax',
-             'c67_r_z2_dof',
-             'c90_r_z0_chisq',
-             'c90_r_z0_redchisq',
-             'c90_r_z0_dmax',
-             'c90_r_z0_fmax',
-             'c90_r_z0_dof',
-             'c90_r_z1_chisq',
-             'c90_r_z1_redchisq',
-             'c90_r_z1_dmax',
-             'c90_r_z1_fmax',
-             'c90_r_z1_dof',
-             'c90_r_z2_chisq',
-             'c90_r_z2_redchisq',
-             'c90_r_z2_dmax',
-             'c90_r_z2_fmax',
-             'c90_r_z2_dof',
-             'c90_r_z3_chisq',
-             'c90_r_z3_redchisq',
-             'c90_r_z3_dmax',
-             'c90_r_z3_fmax',
-             'c90_r_z3_dof',
-             'c42_z_z0_chisq',
-             'c42_z_z0_redchisq',
-             'c42_z_z0_dmax',
-             'c42_z_z0_fmax',
-             'c42_z_z0_dof',
-             'c42_z_z1_chisq',
-             'c42_z_z1_redchisq',
-             'c42_z_z1_dmax',
-             'c42_z_z1_fmax',
-             'c42_z_z1_dof',
-             'c42_z_z2_chisq',
-             'c42_z_z2_redchisq',
-             'c42_z_z2_dmax',
-             'c42_z_z2_fmax',
-             'c42_z_z2_dof',
-             'c42_z_z3_chisq',
-             'c42_z_z3_redchisq',
-             'c42_z_z3_dmax',
-             'c42_z_z3_fmax',
-             'c42_z_z3_dof',
-             'c52_z_z0_chisq',
-             'c52_z_z0_redchisq',
-             'c52_z_z0_dmax',
-             'c52_z_z0_fmax',
-             'c52_z_z0_dof',
-             'c52_z_z1_chisq',
-             'c52_z_z1_redchisq',
-             'c52_z_z1_dmax',
-             'c52_z_z1_fmax',
-             'c52_z_z1_dof',
-             'c52_z_z2_chisq',
-             'c52_z_z2_redchisq',
-             'c52_z_z2_dmax',
-             'c52_z_z2_fmax',
-             'c52_z_z2_dof',
-             'c62_z_z0_chisq',
-             'c62_z_z0_redchisq',
-             'c62_z_z0_dmax',
-             'c62_z_z0_fmax',
-             'c62_z_z0_dof',
-             'c62_z_z1_chisq',
-             'c62_z_z1_redchisq',
-             'c62_z_z1_dmax',
-             'c62_z_z1_fmax',
-             'c62_z_z1_dof',
-             'c62_z_z2_chisq',
-             'c62_z_z2_redchisq',
-             'c62_z_z2_dmax',
-             'c62_z_z2_fmax',
-             'c62_z_z2_dof',
-             'c67_z_z0_chisq',
-             'c67_z_z0_redchisq',
-             'c67_z_z0_dmax',
-             'c67_z_z0_fmax',
-             'c67_z_z0_dof',
-             'c67_z_z1_chisq',
-             'c67_z_z1_redchisq',
-             'c67_z_z1_dmax',
-             'c67_z_z1_fmax',
-             'c67_z_z1_dof',
-             'c67_z_z2_chisq',
-             'c67_z_z2_redchisq',
-             'c67_z_z2_dmax',
-             'c67_z_z2_fmax',
-             'c67_z_z2_dof',
-             'c90_z_z0_chisq',
-             'c90_z_z0_redchisq',
-             'c90_z_z0_dmax',
-             'c90_z_z0_fmax',
-             'c90_z_z0_dof',
-             'c90_z_z1_chisq',
-             'c90_z_z1_redchisq',
-             'c90_z_z1_dmax',
-             'c90_z_z1_fmax',
-             'c90_z_z1_dof',
-             'c90_z_z2_chisq',
-             'c90_z_z2_redchisq',
-             'c90_z_z2_dmax',
-             'c90_z_z2_fmax',
-             'c90_z_z2_dof',
-             'c90_z_z3_chisq',
-             'c90_z_z3_redchisq',
-             'c90_z_z3_dmax',
-             'c90_z_z3_fmax',
-             'c90_z_z3_dof',
-             'dmax_r_std',
-             'dmax_r_mean',
-             'dmax_i_std',
-             'dmax_i_mean',
-             'dmax_g_std',
-             'dmax_g_mean',
-             'dmax_z_std',
-             'dmax_z_mean',
-             'u_switch_cnt',
-             'g_switch_cnt',
-             'r_switch_cnt',
-             'i_switch_cnt',
-             'z_switch_cnt',
-             'Y_switch_cnt',
-             'switch_cnt_mean',
-             'switch_cnt_std',
-             'switch_cnt_max',
+             'dmax_std',
+             'dmax_mean',
     ]
 
 

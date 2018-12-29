@@ -18,7 +18,7 @@ import seaborn as sns
 
 from tools.my_logging import logInit
 from tools.feature_tools import feature_engineering
-from tools.objective_function import weighted_multi_logloss, lgb_multi_weighted_logloss, wloss_objective, wloss_metric, softmax, calc_team_score, wloss_metric_for_zeropad, wloss_objective_gumbel, wloss_metric_gumbel
+from tools.objective_function import weighted_multi_logloss, lgb_multi_weighted_logloss, wloss_objective, wloss_metric, softmax, calc_team_score, wloss_metric_for_zeropad
 from tools.model_io import save_models, load_models
 from tools.fold_resampling import get_fold_resampling_dict
 
@@ -71,20 +71,20 @@ def get_params(args):
     PARAMS = {
         #        'objective': wloss_objective,
         'objective': 'multiclass',
-#        'metric': ['multi_logloss', ],
-        'metric': 'None',
+        'metric': ['multi_logloss', ],
+#        'metric': 'None',
         'num_class': 14,
         'nthread': args.nthread,
         'learning_rate': 0.4,
         #        'learning_rate': 0.02,
         #        'num_leaves': 32,
         'max_depth': 3,
-        'subsample': .8,
-        'colsample_bytree': .7,
-        'reg_alpha': .01,
-        'reg_lambda': .01,
+        'subsample': .9,
+        'colsample_bytree': .5,
+        'reg_alpha': .5,
+        'reg_lambda': .5,
         'min_split_gain': 0.01,
-        'min_child_weight': 200,
+        'min_child_weight': 10,
 #        'n_estimators': 10000,
         'verbose': -1,
         'silent': -1,
@@ -92,10 +92,10 @@ def get_params(args):
         'seed': 71,
 #        'early_stopping_rounds': 100,
         #        'min_data_in_leaf': 30,
-        'max_bin': 20,
-#        'min_data_in_leaf': 300,
+#        'max_bin': 20,
+        'min_data_in_leaf': 150,
 #        'bagging_fraction': 0.1, 
-        'bagging_freq': 1, 
+#        'bagging_freq': 10, 
     }
     return PARAMS
 
@@ -148,7 +148,9 @@ def plt_confusion_matrics():
 
 def main(args, features):
     FEATURES_TO_USE = features
-#    FEATURES_TO_USE = pd.read_csv('./importances/Booster_weight-multi-logloss-0.528846_2018-12-17-06-30-21_importance.csv').sort_values('importance_mean', ascending=False).head(220).feature.tolist()
+    FEATURES_TO_USE = pd.read_csv('./importances/Booster_weight-multi-logloss-0.528846_2018-12-17-06-30-21_importance.csv').sort_values('importance_mean', ascending=False).head(220).feature.tolist()# + ['object_id']
+#####    FEATURES_TO_USE = pd.read_csv('./importances/Booster_weight-multi-logloss-0.534367_2018-12-15-18-49-06_importance.csv').sort_values('importance_mean', ascending=False).head(165).feature.tolist()# + ['object_id']
+#    FEATURES_TO_USE = pd.read_csv('./importances/Booster_weight-multi-logloss-0.534367_2018-12-15-18-49-06_importance.csv').head(165).feature.tolist()# + ['object_id']
     logger = getLogger(__name__)
     logInit(logger, log_dir='./log/', log_filename='train.log')
     logger.info(
@@ -179,12 +181,14 @@ def main(args, features):
 #####        logger=logger)
 
     logger.info('loading train_df ...')
-    train_df = pd.read_feather('./features/train/meta_features.ftr')
+    target = pd.read_feather('./features/train/meta_features.ftr').target
+    train_df = pd.read_pickle('./features/onodera_feats/X_train_1_1217-1.pkl.gz', compression='gzip')
+    train_df['target'] = target
 
     #with open('./lcfit/LCfit_features_train_20181129.pkl', 'rb') as fin:
     #    train_df = train_df.merge(pickle.load(fin), on='object_id', how='left')
     #train_df.drop('object_id', axis=1, inplace=True)
-    train_df = train_df[FEATURES_TO_USE + ['target']]
+    #train_df = train_df[FEATURES_TO_USE + ['target']]
 
     # label encoding しないと lgbm が認識してくれない
     # 若い class に 若い label がつくと良いんだけど...
@@ -200,13 +204,7 @@ def main(args, features):
     skf = StratifiedKFold(n_splits=FOLD_NUM, shuffle=True, random_state=71)
 #    folds = skf.split(
 #        train_df.drop('target', axis=1), le.transform(train_df.target))
-#    folds = skf.split(x_train, y_train)
-    kyle_df = pd.read_hdf('/home/naoya.taguchi/.kaggle/competitions/PLAsTiCC-2018/kyle_final_augment.h5', 'meta').reset_index()
-    folds = []
-    for fold in range(5):
-        _trn_idx = kyle_df.query(f'fold != {fold}').index.tolist()
-        _val_idx = kyle_df.query(f'fold == {fold}').index.tolist()
-        folds.append([_trn_idx, _val_idx])
+    folds = skf.split(x_train, y_train)
 
     logger.info('the shape of x_train : {}'.format(x_train.shape))
     # logger.info('the shape of train_df : {}'.format(train_df.shape))
@@ -294,18 +292,18 @@ def main(args, features):
             ros = RandomOverSampler(
                 ratio=fold_resampling_dict,
                 random_state=71)
-            x_trn, y_trn = ros.fit_sample(x_trn, y_trn)
+#            x_trn, y_trn = ros.fit_sample(x_trn, y_trn)
 
             train_dataset = lightgbm.Dataset(x_trn, y_trn)
             valid_dataset = lightgbm.Dataset(x_val, y_val)
-            booster = lightgbm.train(
-                PARAMS.copy(), train_dataset,
-                num_boost_round=20000,
+            train_dataset = lightgbm.Dataset(x_train, y_train)
+            #booster = lightgbm.train(
+            booster = lightgbm.cv(
+                PARAMS.copy(), train_dataset, nfold=5,
+                num_boost_round=2000,
                 fobj=wloss_objective,
-                #fobj=wloss_objective_gumbel,
                 feval=wloss_metric,
-                #feval=wloss_metric_gumbel,
-                valid_sets=[train_dataset, valid_dataset],
+#                valid_sets=[train_dataset, valid_dataset],
                 verbose_eval=100,
                 early_stopping_rounds=100,
             )

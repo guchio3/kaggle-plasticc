@@ -71,11 +71,11 @@ def get_params(args):
     PARAMS = {
         #        'objective': wloss_objective,
         'objective': 'multiclass',
-#        'metric': ['multi_logloss', ],
-        'metric': 'None',
+        'metric': ['multi_logloss', ],
+#        'metric': 'None',
         'num_class': 14,
         'nthread': args.nthread,
-        'learning_rate': 0.4,
+        'learning_rate': 0.02,
         #        'learning_rate': 0.02,
         #        'num_leaves': 32,
         'max_depth': 3,
@@ -84,15 +84,15 @@ def get_params(args):
         'reg_alpha': .01,
         'reg_lambda': .01,
         'min_split_gain': 0.01,
-        'min_child_weight': 200,
+#        'min_child_weight': 200,
 #        'n_estimators': 10000,
         'verbose': -1,
         'silent': -1,
-        'random_state': 71,
-        'seed': 71,
+        'random_state': 21,
+        'seed': 21,
 #        'early_stopping_rounds': 100,
         #        'min_data_in_leaf': 30,
-        'max_bin': 20,
+#        'max_bin': 20,
 #        'min_data_in_leaf': 300,
 #        'bagging_fraction': 0.1, 
         'bagging_freq': 1, 
@@ -148,7 +148,10 @@ def plt_confusion_matrics():
 
 def main(args, features):
     FEATURES_TO_USE = features
-#    FEATURES_TO_USE = pd.read_csv('./importances/Booster_weight-multi-logloss-0.528846_2018-12-17-06-30-21_importance.csv').sort_values('importance_mean', ascending=False).head(220).feature.tolist()
+    #FEATURES_TO_USE = pd.read_csv('./importances/Booster_weight-multi-logloss-0.521646_2018-12-17-13-29-29_importance.csv').sort_values('importance_mean', ascending=False).head(150).feature.tolist()# + ['object_id']
+    FEATURES_TO_USE = pd.read_csv('./importances/Booster_weight-multi-logloss-0.528846_2018-12-17-06-30-21_importance.csv').sort_values('importance_mean', ascending=False).head(220).feature.tolist()# + ['object_id']
+#####    FEATURES_TO_USE = pd.read_csv('./importances/Booster_weight-multi-logloss-0.534367_2018-12-15-18-49-06_importance.csv').sort_values('importance_mean', ascending=False).head(165).feature.tolist()# + ['object_id']
+#    FEATURES_TO_USE = pd.read_csv('./importances/Booster_weight-multi-logloss-0.534367_2018-12-15-18-49-06_importance.csv').head(165).feature.tolist()# + ['object_id']
     logger = getLogger(__name__)
     logInit(logger, log_dir='./log/', log_filename='train.log')
     logger.info(
@@ -197,16 +200,10 @@ def main(args, features):
         label=le.transform(train_df['target'].values),
     )
 
-    skf = StratifiedKFold(n_splits=FOLD_NUM, shuffle=True, random_state=71)
+    skf = StratifiedKFold(n_splits=FOLD_NUM, shuffle=True, random_state=21)
 #    folds = skf.split(
 #        train_df.drop('target', axis=1), le.transform(train_df.target))
-#    folds = skf.split(x_train, y_train)
-    kyle_df = pd.read_hdf('/home/naoya.taguchi/.kaggle/competitions/PLAsTiCC-2018/kyle_final_augment.h5', 'meta').reset_index()
-    folds = []
-    for fold in range(5):
-        _trn_idx = kyle_df.query(f'fold != {fold}').index.tolist()
-        _val_idx = kyle_df.query(f'fold == {fold}').index.tolist()
-        folds.append([_trn_idx, _val_idx])
+    folds = skf.split(x_train, y_train)
 
     logger.info('the shape of x_train : {}'.format(x_train.shape))
     # logger.info('the shape of train_df : {}'.format(train_df.shape))
@@ -218,52 +215,7 @@ def main(args, features):
 #    logger.debug('categorical features indexes are : {}'.format(categotical_features))
 #    PARAMS['categorical_feature'] = categorical_features_idx
 
-
-    if False:  # args.with_test:
-        cv_hist = lightgbm.cv(
-            params=PARAMS,
-            folds=folds,
-            train_set=train_set,
-            nfold=FOLD_NUM,
-            verbose_eval=100,
-            feval=lgb_multi_weighted_logloss,
-        )
-        logger.info('best_scores : {}'.format(
-            np.min(cv_hist['multi_logloss-mean'])))
-        logger.debug(cv_hist)
-
-    elif False:
-        best_scores = []
-        trained_models = []
-        x_train = train_df.drop('target', axis=1).values
-        y_train = train_df['target'].values
-        train_columns = train_df.drop('target', axis=1).columns
-        feature_importance_df = pd.DataFrame()
-        i = 1
-
-        for trn_idx, val_idx in tqdm(list(folds)):
-            x_trn, x_val = x_train[trn_idx], x_train[val_idx]
-            y_trn, y_val = y_train[trn_idx], y_train[val_idx]
-            lgb = lightgbm.LGBMClassifier(**PARAMS)
-            lgb.fit(x_trn, y_trn,
-                    eval_set=[(x_trn, y_trn), (x_val, y_val)],
-                    verbose=100,
-                    eval_metric=lgb_multi_weighted_logloss,
-                    #                    eval_metric=weighted_multi_logloss,
-                    #                    eval_metric='multi_logloss',
-                    )
-#            logger.info('best_itr : {}'.format(lgb.best_iteration_))
-            logger.info('best_scores : {}'.format(lgb.best_score_))
-            best_scores.append(lgb.best_score_['valid_1']['wloss'])
-            trained_models.append(lgb)
-            fold_importance_df = pd.DataFrame()
-            fold_importance_df["feature"] = train_columns
-            fold_importance_df["importance"] = lgb.feature_importances_
-            fold_importance_df["fold"] = i
-            feature_importance_df = pd.concat(
-                [feature_importance_df, fold_importance_df], axis=0)
-            i += 1
-    else:
+    if True:
         best_scores = []
         team_scores = []
         zeropad_scores = []
@@ -300,19 +252,21 @@ def main(args, features):
             valid_dataset = lightgbm.Dataset(x_val, y_val)
             booster = lightgbm.train(
                 PARAMS.copy(), train_dataset,
-                num_boost_round=20000,
-                fobj=wloss_objective,
+                num_boost_round=2000,
+                #fobj=wloss_objective,
                 #fobj=wloss_objective_gumbel,
-                feval=wloss_metric,
-                #feval=wloss_metric_gumbel,
+                #feval=wloss_metric,
+#                feval=wloss_metric,
                 valid_sets=[train_dataset, valid_dataset],
                 verbose_eval=100,
                 early_stopping_rounds=100,
             )
             logger.debug('valid info : {}'.format(booster.best_score))
-            logger.info('best score : {}'.format(booster.best_score['valid_1']['wloss']))
+            logger.info('best score : {}'.format(booster.best_score))
+            #logger.info('best score : {}'.format(booster.best_score['valid_1']['wloss']))
             logger.info('best iteration : {}'.format(booster.best_iteration))
-            best_scores.append(booster.best_score['valid_1']['wloss'])
+            best_scores.append(booster.best_score['valid_1']['multi_logloss'])
+            #best_scores.append(booster.best_score['valid_1']['wloss'])
             best_iterations.append(booster.best_iteration)
             trained_models.append(booster)
             fold_importance_df = pd.DataFrame()
@@ -321,7 +275,8 @@ def main(args, features):
             feature_importance_df = feature_importance_df.merge(fold_importance_df, on='feature', how='left')
             #feature_importance_df = pd.concat(
             #    [feature_importance_df, fold_importance_df], axis=0)
-            val_pred_score = softmax(booster.predict(x_val, raw_score=False))
+            #val_pred_score = softmax(booster.predict(x_val, raw_score=False))
+            val_pred_score = booster.predict(x_val, raw_score=False)
             val_pred_score_zeropad = booster.predict(x_val, raw_score=False)
             oof.append([val_pred_score_zeropad, y_val, val_idx])
             gal_cols = [0, 2, 5, 8, 12]
@@ -360,7 +315,7 @@ def main(args, features):
                     start_time, )
         with open(val_pred_score_zeropads_path, 'wb') as fout:
             pickle.dump(val_pred_score_zeropads, fout)
-        oof_path = './oof/{}_weight-multi-logloss-{:.6}_{}.pkl'\
+        oof_path = './oof/{}_multi-logloss-{:.6}_{}.pkl'\
             .format(trained_models[0].__class__.__name__,
                     mean_best_score,
                     start_time, )
@@ -422,8 +377,8 @@ def main(args, features):
             lin_booster = lightgbm.train(
                 PARAMS.copy(), train_dataset,
                 num_boost_round=interpolated_num_boost_round,
-                fobj=wloss_objective,
-                feval=wloss_metric,
+#                fobj=wloss_objective,
+#                feval=wloss_metric,
                 valid_sets=[train_dataset, ],
                 verbose_eval=100,
                 early_stopping_rounds=100
@@ -482,7 +437,8 @@ def main(args, features):
             test_reses = []
             for lgb in tqdm(trained_models):
                 test_reses.append(
-                    softmax(lgb.predict(x_test, raw_score=False)))
+                    lgb.predict(x_test, raw_score=False))
+                    #softmax(lgb.predict(x_test, raw_score=False)))
                 # test_reses.append(lgb.predict_proba(x_test, raw_score=False))
 
 #            res = np.clip(np.mean(test_reses, axis=0),
@@ -490,7 +446,8 @@ def main(args, features):
 
             # prediction of linear interpolated
             lin_test_res = \
-                    softmax(lin_booster.predict(x_test, raw_score=False))
+                    lin_booster.predict(x_test, raw_score=False)
+                    #softmax(lin_booster.predict(x_test, raw_score=False))
 
 #            test_reses.append(lin_test_res)
 #            temp_filename = './temp/{}_weight-multi-logloss-{:.6}_{}_res.csv'\
